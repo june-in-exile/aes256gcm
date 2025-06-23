@@ -4,33 +4,6 @@
 
 ## 🚀 快速開始
 
-### 1. 建立專案
-
-```bash
-# 建立專案目錄
-mkdir aes256gcm-zkp
-cd aes256gcm-zkp
-
-# 初始化 pnpm 專案
-pnpm init
-```
-
-### 2. 安裝依賴
-
-```bash
-pnpm add -D @types/node tsx typescript
-```
-
-### 3. 設置專案文件
-
-將以下文件放入專案根目錄：
-- `package.json` - 專案配置
-- `tsconfig.json` - TypeScript 配置
-- `src/aes256gcm.ts` - 主要實作
-- `src/test.ts` - 測試和使用範例
-
-### 4. 運行測試
-
 ```bash
 # 運行基本驗證測試
 pnpm dev
@@ -44,15 +17,18 @@ pnpm test
 ### 基礎工具類
 
 #### `AESUtils`
+
 - `bytesToHex(bytes)` - 字節數組轉十六進制字符串
 - `hexToBytes(hex)` - 十六進制字符串轉字節數組
 - `xor(a, b)` - 兩個字節數組的 XOR 運算
 - `randomBytes(length)` - 生成隨機字節數組
 
 #### `AES256`
+
 - `encryptBlock(plaintext, key)` - 單區塊 AES-256 加密
 
 #### `AES256GCM`
+
 - `encrypt(plaintext, key, iv, additionalData?)` - 完整的 AES-256-GCM 加密
 
 ## 🔧 使用範例
@@ -60,42 +36,44 @@ pnpm test
 ### 基本加密
 
 ```typescript
-import { AES256GCM, AESUtils } from './src/aes256gcm.js';
+import { AES256GCM, AESUtils } from "./src/aes256gcm.js";
 
 // 生成密鑰和 IV
-const key = AESUtils.randomBytes(32);  // 256 位密鑰
-const iv = AESUtils.randomBytes(12);   // 96 位 IV
+const key = AESUtils.randomBytes(32); // 256 位密鑰
+const iv = AESUtils.randomBytes(12); // 96 位 IV
 
 // 準備明文
-const plaintext = new TextEncoder().encode('Hello, World!');
+const plaintext = new TextEncoder().encode("Hello, World!");
 
 // 加密
 const result = AES256GCM.encrypt(plaintext, key, iv);
 
-console.log('密文:', AESUtils.bytesToHex(result.ciphertext));
-console.log('認證標籤:', AESUtils.bytesToHex(result.tag));
+console.log("密文:", AESUtils.bytesToHex(result.ciphertext));
+console.log("認證標籤:", AESUtils.bytesToHex(result.tag));
 ```
 
 ### 單區塊 AES-256
 
 ```typescript
-import { AES256, AESUtils } from './src/aes256gcm.js';
+import { AES256, AESUtils } from "./src/aes256gcm.js";
 
-const key = AESUtils.hexToBytes('603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4');
-const plaintext = AESUtils.hexToBytes('6bc1bee22e409f96e93d7e117393172a');
+const key = AESUtils.hexToBytes(
+  "603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4"
+);
+const plaintext = AESUtils.hexToBytes("6bc1bee22e409f96e93d7e117393172a");
 
 const ciphertext = AES256.encryptBlock(plaintext, key);
-console.log('密文:', AESUtils.bytesToHex(ciphertext));
+console.log("密文:", AESUtils.bytesToHex(ciphertext));
 ```
 
 ### 驗證實作正確性
 
 ```typescript
-import { AESVerification } from './src/aes256gcm.js';
+import { AESVerification } from "./src/aes256gcm.js";
 
 // 運行所有驗證測試
 const allPassed = AESVerification.runAllTests();
-console.log('測試結果:', allPassed ? '通過' : '失敗');
+console.log("測試結果:", allPassed ? "通過" : "失敗");
 ```
 
 ## 🏗️ 架構說明
@@ -103,15 +81,18 @@ console.log('測試結果:', allPassed ? '通過' : '失敗');
 ### 核心組件
 
 1. **基礎運算層**
+
    - `AESUtils` - 工具函數
    - `GaloisField` - GF(2^8) 域運算
    - `AESSbox` - S-box 替換
 
 2. **AES 變換層**
+
    - `AESTransforms` - 四大變換（SubBytes, ShiftRows, MixColumns, AddRoundKey）
    - `AESKeyExpansion` - 密鑰擴展
 
 3. **加密層**
+
    - `AES256` - AES-256 區塊加密
    - `AES256GCM` - GCM 模式實作
 
@@ -142,11 +123,13 @@ pnpm tsx src/test.ts
 ### 測試內容
 
 1. **正確性驗證**
+
    - Node.js crypto 模組對比
    - NIST 標準測試向量
    - 中間步驟驗證
 
 2. **功能測試**
+
    - 單區塊加密
    - GCM 模式加密
    - 錯誤處理
