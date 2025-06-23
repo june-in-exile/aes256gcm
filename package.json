@@ -1,0 +1,22 @@
+{
+  "name": "ase256gcm",
+  "version": "1.0.0",
+  "description": "AES-256-GCM implementation",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/aes256gcm.ts",
+    "test": "tsx src/test.ts",
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["aes", "gcm", "crypto"],
+  "author": "",
+  "license": "MIT",
+  "packageManager": "pnpm@10.11.0",
+  "devDependencies": {
+    "@types/node": "^24.0.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}
