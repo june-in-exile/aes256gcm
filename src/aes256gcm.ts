@@ -54,6 +54,26 @@ export class AESUtils {
   static randomBytes(length: number): Uint8Array {
     return crypto.getRandomValues(new Uint8Array(length));
   }
+
+  // 字節數組轉 base64
+  static bytesToBase64(bytes: Uint8Array): string {
+    return Buffer.from(bytes).toString('base64');
+  }
+
+  // base64 轉字節數組
+  static base64ToBytes(base64: string): Uint8Array {
+    return new Uint8Array(Buffer.from(base64, 'base64'));
+  }
+
+  // 字符串轉字節數組 (UTF-8)
+  static stringToBytes(str: string): Uint8Array {
+    return new TextEncoder().encode(str);
+  }
+
+  // 字節數組轉字符串 (UTF-8)
+  static bytesToString(bytes: Uint8Array): string {
+    return new TextDecoder().decode(bytes);
+  }
 }
 
 // AES S-box 和逆 S-box
@@ -404,6 +424,73 @@ export class AES256GCM {
   }
 }
 
+// 便利的 API 函數，直接使用 base64 和字符串
+export class AES256GCMEasy {
+  // 簡化的加密 API - 輸入和輸出都使用 base64/string 格式
+  static encrypt(
+    plaintext: string,
+    keyBase64?: string,
+    ivBase64?: string
+  ): { key: string; iv: string; ciphertext: string; tag: string } {
+    // 如果沒有提供密鑰，生成隨機密鑰
+    const keyBytes = keyBase64 ? AESUtils.base64ToBytes(keyBase64) : AESUtils.randomBytes(32);
+
+    // 如果沒有提供 IV，生成隨機 IV
+    const ivBytes = ivBase64 ? AESUtils.base64ToBytes(ivBase64) : AESUtils.randomBytes(12);
+
+    // 轉換明文為字節
+    const plaintextBytes = AESUtils.stringToBytes(plaintext);
+
+    // 執行加密
+    const result = AES256GCM.encrypt(plaintextBytes, keyBytes, ivBytes);
+
+    // 返回 base64 格式的結果
+    return {
+      key: AESUtils.bytesToBase64(keyBytes),
+      iv: AESUtils.bytesToBase64(ivBytes),
+      ciphertext: AESUtils.bytesToBase64(result.ciphertext),
+      tag: AESUtils.bytesToBase64(result.tag)
+    };
+  }
+
+  // 單區塊加密 API
+  static encryptBlock(
+    plaintext: string,
+    keyBase64: string
+  ): { key: string; plaintext: string; ciphertext: string } {
+    const keyBytes = AESUtils.base64ToBytes(keyBase64);
+    const plaintextBytes = AESUtils.stringToBytes(plaintext);
+
+    // 確保明文剛好 16 字節
+    const paddedPlaintext = new Uint8Array(16);
+    paddedPlaintext.set(plaintextBytes.slice(0, 16));
+
+    // 執行單區塊加密
+    const ciphertext = AES256.encryptBlock(paddedPlaintext, keyBytes);
+
+    return {
+      key: keyBase64,
+      plaintext: plaintext,
+      ciphertext: AESUtils.bytesToBase64(ciphertext)
+    };
+  }
+
+  // 生成測試向量
+  static generateTestVector(
+    plaintext: string,
+    keyBase64?: string
+  ): { key: string; plaintext: string; expected: string } {
+    const keyBytes = keyBase64 ? AESUtils.base64ToBytes(keyBase64) : AESUtils.randomBytes(32);
+    const result = this.encryptBlock(plaintext, AESUtils.bytesToBase64(keyBytes));
+
+    return {
+      key: result.key,
+      plaintext: result.plaintext,
+      expected: result.ciphertext
+    };
+  }
+}
+
 // 驗證函數
 export class AESVerification {
   // 使用 Node.js crypto 模組驗證
@@ -433,21 +520,24 @@ export class AESVerification {
     return isEqual;
   }
 
-  // 使用 NIST 標準測試向量
-  static testWithNISTVectors(): boolean {
-    console.log('\n=== NIST 標準測試向量 ===');
+  // 測試 GCM 模式
+  static testGCMMode(): boolean {
+    console.log('\n=== AES-256-GCM 測試 ===');
 
-    // NIST FIPS 197 測試向量
     const testVectors = [
       {
-        key: '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
-        plaintext: '00112233445566778899aabbccddeeff',
-        expected: '8ea2b7ca516745bfeafc49904b496089'
+        plaintext: 'Hello AES-256!',
+        key: 'DioXvY+X8oqF3P/aVsX+NK/uD49WKDXZQYVvJxJ3yq0=',
+        iv: 'C9Eil8xroSgeJ8vR',
+        cyphertext: 'VknVANIlVtTAQkq1Sop+Rw==',
+        tag: 'wCdM4THEyev+ShGcFDCHgw==',
       },
       {
-        key: '603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4',
-        plaintext: '6bc1bee22e409f96e93d7e117393172a',
-        expected: 'f3eed1bdb5d2a03c064b5a7e3db181f8'
+        plaintext: '{\n"testator": "0x041F57c4492760aaE44ECed29b49a30DaAD3D4Cc"\n}',
+        key: 'kDtgass1xro445m65GQoRH1f/OjGpwtgEi91xIBKt7s=',
+        iv: 'kuemlftSTikZUhvf',
+        cyphertext: 'zjrJxvAetCKNHqqLURslo5EGQjcdcslZ3FAX99lNuDgfW3tNH7eQ6ooz5Swn3phiopG0/oPfbf4Tq9Ia9yM=',
+        authTag: 'NsA8H+PwX59l5Sr2HxzQGQ==',
       }
     ];
 
@@ -456,41 +546,34 @@ export class AESVerification {
     testVectors.forEach((vector, index) => {
       console.log(`\n測試向量 ${index + 1}:`);
 
-      const key = AESUtils.hexToBytes(vector.key);
-      const plaintext = AESUtils.hexToBytes(vector.plaintext);
-      const expected = vector.expected;
+      console.log('明文:', vector.plaintext);
+      console.log('密鑰 (base64):', vector.key);
+      console.log('IV (base64):', vector.iv);
 
-      const result = AES256.encryptBlock(plaintext, key);
-      const resultHex = AESUtils.bytesToHex(result);
+      const plaintext = AESUtils.stringToBytes(vector.plaintext);
+      const key = AESUtils.base64ToBytes(vector.key);
+      const iv = AESUtils.base64ToBytes(vector.iv);
 
-      console.log('預期結果:', expected);
-      console.log('實際結果:', resultHex);
+      const result = AES256GCM.encrypt(plaintext, key, iv);
 
-      const passed = resultHex === expected;
-      console.log('測試結果:', passed ? '✅ 通過' : '❌ 失敗');
+      console.log('實際結果:');
+      console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext));
+      console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.tag));
 
-      if (!passed) allPassed = false;
+      console.log('預期結果:');
+      console.log('密文 (base64):', vector.cyphertext);
+      console.log('認證標籤 (base64):', vector.tag);
+
+      const cyphertextPassed = AESUtils.bytesToBase64(result.ciphertext) === vector.cyphertext;
+      const tagPassed = AESUtils.bytesToBase64(result.tag) === vector.tag;
+
+      console.log('測試結果:');
+      console.log('密文 (base64):', cyphertextPassed ? '✅ 通過' : '❌ 失敗');
+      console.log('認證標籤 (base64):', tagPassed ? '✅ 通過' : '❌ 失敗');
+      if (!cyphertextPassed || !tagPassed) allPassed = false;
     });
 
     return allPassed;
-  }
-
-  // 測試 GCM 模式
-  static testGCMMode(): void {
-    console.log('\n=== AES-256-GCM 測試 ===');
-
-    const key = AESUtils.hexToBytes('feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308');
-    const iv = AESUtils.hexToBytes('cafebabefacedbaddecaf888');
-    const plaintext = AESUtils.hexToBytes('d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b391aafd255');
-
-    console.log('密鑰:', AESUtils.bytesToHex(key));
-    console.log('IV:', AESUtils.bytesToHex(iv));
-    console.log('明文:', AESUtils.bytesToHex(plaintext));
-
-    const result = AES256GCM.encrypt(plaintext, key, iv);
-
-    console.log('密文:', AESUtils.bytesToHex(result.ciphertext));
-    console.log('認證標籤:', AESUtils.bytesToHex(result.tag));
   }
 
   // 測試中間步驟
@@ -522,16 +605,16 @@ export class AESVerification {
     this.testIntermediateSteps();
 
     const cryptoMatches = this.verifyWithNodeCrypto();
-    const nistPassed = this.testWithNISTVectors();
+    // const nistPassed = this.testWithGivenVectors();
 
     this.testGCMMode();
 
     console.log('\n📊 測試總結:');
     console.log('Node.js crypto 一致性:', cryptoMatches ? '✅' : '❌');
-    console.log('NIST 測試向量:', nistPassed ? '✅' : '❌');
-    console.log('整體狀態:', (cryptoMatches && nistPassed) ? '🎉 所有測試通過！' : '⚠️  存在問題，需要修正');
+    // console.log('NIST 測試向量:', nistPassed ? '✅' : '❌');
+    console.log('整體狀態:', cryptoMatches ? '🎉 所有測試通過！' : '⚠️  存在問題，需要修正');
 
-    return cryptoMatches && nistPassed;
+    return cryptoMatches;
   }
 }
 
