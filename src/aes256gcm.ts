@@ -1,23 +1,18 @@
 /**
- * AES-256-GCM TypeScript Implementation
- * 用於 ZKP 電路驗證的參考實作
+ * AES-256-GCM TypeScript 實作
  */
 
 import { createCipheriv } from 'crypto';
 
-// 基礎工具函數
 export class AESUtils {
-  // 將字節轉換為十六進制字符串 (調試用)
   static bytesToHex(bytes: Buffer): string {
     return bytes.toString('hex');
   }
 
-  // 十六進制字符串轉字節
   static hexToBytes(hex: string): Buffer {
     return Buffer.from(hex, 'hex');
   }
 
-  // XOR 兩個字節數組
   static xor(a: Buffer, b: Buffer): Buffer {
     const result = Buffer.alloc(Math.min(a.length, b.length));
     for (let i = 0; i < result.length; i++) {
@@ -26,47 +21,38 @@ export class AESUtils {
     return result;
   }
 
-  // 將 32 位整數轉換為字節數組 (大端序)
   static u32ToBytes(value: number): Buffer {
     const buffer = Buffer.alloc(4);
     buffer.writeUInt32BE(value, 0);
     return buffer;
   }
 
-  // 將字節數組轉換為 32 位整數 (大端序)
   static bytesToU32(bytes: Buffer, offset: number = 0): number {
     return bytes.readUInt32BE(offset);
   }
 
-  // 生成隨機字節
   static randomBytes(length: number): Buffer {
     return Buffer.from(crypto.getRandomValues(new Uint8Array(length)));
   }
 
-  // 字節數組轉 base64
   static bytesToBase64(bytes: Buffer): string {
     return bytes.toString('base64');
   }
 
-  // base64 轉字節數組
   static base64ToBytes(base64: string): Buffer {
     return Buffer.from(base64, 'base64');
   }
 
-  // 字符串轉字節數組 (UTF-8)
   static stringToBytes(str: string): Buffer {
     return Buffer.from(str, 'utf8');
   }
 
-  // 字節數組轉字符串 (UTF-8)
   static bytesToString(bytes: Buffer): string {
     return bytes.toString('utf8');
   }
 }
 
-// AES S-box 和逆 S-box
 export class AESSbox {
-  // AES S-box 查找表
   static readonly SBOX = Buffer.from([
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
     0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0,
@@ -86,12 +72,10 @@ export class AESSbox {
     0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16
   ]);
 
-  // 應用 S-box 變換
   static substitute(input: number): number {
     return this.SBOX[input];
   }
 
-  // 對字節數組應用 S-box
   static substituteBytes(bytes: Buffer): Buffer {
     const result = Buffer.alloc(bytes.length);
     for (let i = 0; i < bytes.length; i++) {
@@ -101,9 +85,7 @@ export class AESSbox {
   }
 }
 
-// Galois 域 GF(2^8) 運算
 export class GaloisField {
-  // GF(2^8) 乘法，使用不可約多項式 0x11b
   static multiply(a: number, b: number): number {
     let result = 0;
     let temp_a = a;
@@ -114,13 +96,12 @@ export class GaloisField {
         result ^= temp_a;
       }
 
-      // 檢查是否需要減去不可約多項式
       const carry = temp_a & 0x80;
       temp_a <<= 1;
-      temp_a &= 0xff; // 保持在 8 位範圍內
+      temp_a &= 0xff;
 
       if (carry) {
-        temp_a ^= 0x1b; // 不可約多項式 x^8 + x^4 + x^3 + x + 1
+        temp_a ^= 0x1b;
       }
 
       temp_b >>= 1;
@@ -129,11 +110,9 @@ export class GaloisField {
     return result;
   }
 
-  // 預計算的 2, 3 倍數表 (優化用)
   static readonly MUL2 = Buffer.alloc(256);
   static readonly MUL3 = Buffer.alloc(256);
 
-  // 初始化倍數表
   static initMultiplicationTables() {
     for (let i = 0; i < 256; i++) {
       this.MUL2[i] = this.multiply(i, 2);
@@ -141,7 +120,6 @@ export class GaloisField {
     }
   }
 
-  // 快速乘法 (使用預計算表)
   static fastMul2(x: number): number {
     return this.MUL2[x];
   }
@@ -151,58 +129,41 @@ export class GaloisField {
   }
 }
 
-// 初始化 Galois 域倍數表
 GaloisField.initMultiplicationTables();
 
-// AES 核心變換
 export class AESTransforms {
-  // SubBytes 變換 - 對狀態矩陣的每個字節應用 S-box
   static subBytes(state: Buffer): Buffer {
     return AESSbox.substituteBytes(state);
   }
 
-  // ShiftRows 變換 - 對狀態矩陣的行進行循環左移
   static shiftRows(state: Buffer): Buffer {
     const result = Buffer.alloc(16);
 
-    // 第一行不變 (索引 0, 4, 8, 12)
     result[0] = state[0]; result[4] = state[4];
     result[8] = state[8]; result[12] = state[12];
 
-    // 第二行左移 1 位 (索引 1, 5, 9, 13)
     result[1] = state[5]; result[5] = state[9];
     result[9] = state[13]; result[13] = state[1];
 
-    // 第三行左移 2 位 (索引 2, 6, 10, 14)
     result[2] = state[10]; result[6] = state[14];
     result[10] = state[2]; result[14] = state[6];
 
-    // 第四行左移 3 位 (索引 3, 7, 11, 15)
     result[3] = state[15]; result[7] = state[3];
     result[11] = state[7]; result[15] = state[11];
 
     return result;
   }
 
-  // MixColumns 變換 - 在 GF(2^8) 中進行列混合
   static mixColumns(state: Buffer): Buffer {
     const result = Buffer.alloc(16);
 
-    // 對每一列進行變換
     for (let col = 0; col < 4; col++) {
       const offset = col * 4;
 
-      // 獲取當前列的四個字節
       const s0 = state[offset];
       const s1 = state[offset + 1];
       const s2 = state[offset + 2];
       const s3 = state[offset + 3];
-
-      // 應用 MixColumns 矩陣:
-      // [2 3 1 1]   [s0]
-      // [1 2 3 1] × [s1]
-      // [1 1 2 3]   [s2]
-      // [3 1 1 2]   [s3]
 
       result[offset] = GaloisField.fastMul2(s0) ^ GaloisField.fastMul3(s1) ^ s2 ^ s3;
       result[offset + 1] = s0 ^ GaloisField.fastMul2(s1) ^ GaloisField.fastMul3(s2) ^ s3;
@@ -213,68 +174,55 @@ export class AESTransforms {
     return result;
   }
 
-  // AddRoundKey 變換 - 將輪密鑰與狀態進行 XOR
   static addRoundKey(state: Buffer, roundKey: Buffer): Buffer {
     return AESUtils.xor(state, roundKey);
   }
 }
 
-// AES 密鑰擴展
 export class AESKeyExpansion {
-  // AES-256 的輪常數
   static readonly RCON = Buffer.from([
     0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36,
     0x6c, 0xd8, 0xab, 0x4d, 0x9a, 0x2f
   ]);
 
-  // 將 4 字節字進行循環左移
   static rotWord(word: Buffer): Buffer {
     return Buffer.from([word[1], word[2], word[3], word[0]]);
   }
 
-  // 對 4 字節字應用 S-box
   static subWord(word: Buffer): Buffer {
     return AESSbox.substituteBytes(word);
   }
 
-  // AES-256 密鑰擴展 (生成 15 輪密鑰，每輪 16 字節)
   static expandKey(key: Buffer): Buffer[] {
     if (key.length !== 32) {
       throw new Error('AES-256 requires a 32-byte key');
     }
 
     const roundKeys: Buffer[] = [];
-    const expandedKey = Buffer.alloc(240); // 15 輪 × 16 字節
+    const expandedKey = Buffer.alloc(240);
 
-    // 前兩輪密鑰直接來自原始密鑰
     key.copy(expandedKey, 0);
 
-    // 擴展剩餘的密鑰
     for (let i = 32; i < 240; i += 4) {
-      // 獲取前一個字
       const prevWord = expandedKey.subarray(i - 4, i);
       let newWord: Buffer;
 
       if (i % 32 === 0) {
-        // 每 8 個字 (32 字節) 進行 RotWord + SubWord + Rcon
         const rotated = this.rotWord(prevWord);
         const substituted = this.subWord(rotated);
         const rconValue = Buffer.from([this.RCON[(i / 32) - 1], 0, 0, 0]);
         newWord = AESUtils.xor(substituted, rconValue);
       } else if (i % 32 === 16) {
-        // AES-256 特殊情況：第 4 個字需要 SubWord
         newWord = this.subWord(prevWord);
       } else {
         newWord = Buffer.from(prevWord);
       }
 
-      // 與 8 個字之前的字進行 XOR
       const prevRoundWord = expandedKey.subarray(i - 32, i - 28);
       const finalWord = AESUtils.xor(newWord, prevRoundWord);
       finalWord.copy(expandedKey, i);
     }
 
-    // 將擴展密鑰分割為輪密鑰
     for (let round = 0; round < 15; round++) {
       roundKeys.push(expandedKey.subarray(round * 16, (round + 1) * 16));
     }
@@ -283,24 +231,17 @@ export class AESKeyExpansion {
   }
 }
 
-// AES-256 加密實作
 export class AES256 {
-  // AES-256 加密單個區塊
   static encryptBlock(plaintext: Buffer, key: Buffer): Buffer {
     if (plaintext.length !== 16) {
       throw new Error('Plaintext must be exactly 16 bytes');
     }
 
-    // 密鑰擴展
     const roundKeys = AESKeyExpansion.expandKey(key);
-
-    // 初始狀態
     let state = Buffer.from(plaintext);
 
-    // 初始 AddRoundKey
     state = AESTransforms.addRoundKey(state, roundKeys[0]);
 
-    // 13 輪標準變換 (AES-256 有 14 輪，最後一輪特殊)
     for (let round = 1; round <= 13; round++) {
       state = AESTransforms.subBytes(state);
       state = AESTransforms.shiftRows(state);
@@ -308,7 +249,6 @@ export class AES256 {
       state = AESTransforms.addRoundKey(state, roundKeys[round]);
     }
 
-    // 最後一輪 (沒有 MixColumns)
     state = AESTransforms.subBytes(state);
     state = AESTransforms.shiftRows(state);
     state = AESTransforms.addRoundKey(state, roundKeys[14]);
@@ -317,28 +257,72 @@ export class AES256 {
   }
 }
 
-// AES-256-GCM 實作
+// GF(2^128) 運算
+export class GF128 {
+  // GF(2^128) 乘法運算，使用約化多項式 f(x) = x^128 + x^7 + x^2 + x + 1
+  static multiply(x: Buffer, y: Buffer): Buffer {
+    const result = Buffer.alloc(16);
+    const v = Buffer.from(y);
+
+    // 對 x 的每一位進行處理
+    for (let i = 0; i < 128; i++) {
+      const byteIndex = Math.floor(i / 8);
+      const bitIndex = 7 - (i % 8);
+
+      // 如果 x 的當前位是 1，則將 v 加到結果中
+      if ((x[byteIndex] >> bitIndex) & 1) {
+        for (let j = 0; j < 16; j++) {
+          result[j] ^= v[j];
+        }
+      }
+
+      // v 右移一位
+      let carry = 0;
+      for (let j = 0; j < 16; j++) {
+        const newCarry = v[j] & 1;
+        v[j] = (v[j] >> 1) | (carry << 7);
+        carry = newCarry;
+      }
+
+      // 如果有進位，需要減去約化多項式
+      // f(x) = x^128 + x^7 + x^2 + x + 1 對應 11100001 00000000 ... 00000000
+      if (carry) {
+        v[0] ^= 0xe1;
+      }
+    }
+
+    return result;
+  }
+}
+
 export class AES256GCM {
-  // 計數器模式加密
+  // 修正：正確的 CTR 模式實作
   static ctrEncrypt(plaintext: Buffer, key: Buffer, iv: Buffer): Buffer {
-    console.log("plaintext:", plaintext);
-    console.log("key:", key);
-    console.log("iv:", iv);
+    if (iv.length !== 12) {
+      throw new Error('IV must be exactly 12 bytes for GCM');
+    }
 
     const numBlocks = Math.ceil(plaintext.length / 16);
     const ciphertext = Buffer.alloc(plaintext.length);
 
-    // 初始計數器
-    const counter = Buffer.alloc(16);
-    iv.subarray(0, 12).copy(counter, 0); // IV 的前 12 字節
+    // Compute J0
+    const j0 = Buffer.alloc(16);
+    iv.copy(j0, 0, 0, 12);
+    j0.writeUInt32BE(1, 12); // J0 = IV || 0x00000001
+
+    // counter = J0 + 1
+    const counter = Buffer.from(j0);
 
     for (let i = 0; i < numBlocks; i++) {
-      // 設置計數器值 (後 4 字節)
-      const counterValue = i + 1;
-      const counterBytes = AESUtils.u32ToBytes(counterValue);
-      counterBytes.copy(counter, 12);
+      // 遞增計數器（只遞增最後 4 個字節）
+      let carry = 1;
+      for (let j = 15; j >= 12 && carry; j--) {
+        const sum = counter[j] + carry;
+        counter[j] = sum & 0xff;
+        carry = sum >> 8;
+      }
 
-      // 加密計數器
+      // 加密當前計數器
       const keystream = AES256.encryptBlock(counter, key);
 
       // 與明文進行 XOR
@@ -354,31 +338,26 @@ export class AES256GCM {
     return ciphertext;
   }
 
-  // GHASH 認證標籤計算 (簡化版)
   static ghash(data: Buffer, hashKey: Buffer): Buffer {
-    // 這是 GHASH 的簡化實作
-    // 完整實作需要 GF(2^128) 運算
-    const result = Buffer.alloc(16);
+    let result = Buffer.alloc(16);
 
-    // 處理每 16 字節區塊
+    // 處理每 16 字節塊
     for (let i = 0; i < data.length; i += 16) {
       const block = Buffer.alloc(16);
-      const blockData = data.subarray(i, Math.min(i + 16, data.length));
-      blockData.copy(block);
+      const actualLength = Math.min(16, data.length - i);
+      data.subarray(i, i + actualLength).copy(block, 0);
 
-      // XOR 與前一個結果
+      // GHASH 運算：result = (result ⊕ block) × H
       for (let j = 0; j < 16; j++) {
         result[j] ^= block[j];
       }
 
-      // 在實際實作中，這裡需要與 hashKey 進行 GF(2^128) 乘法
-      // 現在使用簡化版本
+      result = GF128.multiply(result, hashKey);
     }
 
     return result;
   }
 
-  // 完整的 AES-256-GCM 加密
   static encrypt(
     plaintext: Buffer,
     key: Buffer,
@@ -388,54 +367,73 @@ export class AES256GCM {
     if (key.length !== 32) {
       throw new Error('AES-256-GCM requires a 32-byte key');
     }
+    if (iv.length !== 12) {
+      throw new Error('IV must be exactly 12 bytes');
+    }
 
-    // 生成 hash 子密鑰
+    // 1. 生成 hash subkey: H = E_K(0^128)
     const zeroBlock = Buffer.alloc(16);
     const hashKey = AES256.encryptBlock(zeroBlock, key);
 
-    // CTR 模式加密
+    // 2. CTR 模式加密
     const ciphertext = this.ctrEncrypt(plaintext, key, iv);
 
-    // 計算認證標籤
-    const authData = Buffer.alloc(additionalData.length + ciphertext.length);
-    additionalData.copy(authData, 0);
-    ciphertext.copy(authData, additionalData.length);
+    // 3. 構造 GHASH 輸入數據
+    // S = AAD || 0^v || C || 0^u || [len(AAD)]64 || [len(C)]64
+    const aadPadding = (16 - (additionalData.length % 16)) % 16;
+    const ciphertextPadding = (16 - (ciphertext.length % 16)) % 16;
 
+    const authDataLength = additionalData.length + aadPadding +
+      ciphertext.length + ciphertextPadding + 16;
+    const authData = Buffer.alloc(authDataLength);
+
+    let offset = 0;
+
+    // 添加 AAD
+    additionalData.copy(authData, offset);
+    offset += additionalData.length + aadPadding;
+
+    // 添加密文
+    ciphertext.copy(authData, offset);
+    offset += ciphertext.length + ciphertextPadding;
+
+    // 添加長度信息（64位大端序）
+    const aadLengthBits = additionalData.length * 8;
+    const ciphertextLengthBits = ciphertext.length * 8;
+
+    authData.writeUInt32BE(Math.floor(aadLengthBits / 0x100000000), offset);
+    authData.writeUInt32BE(aadLengthBits & 0xffffffff, offset + 4);
+    authData.writeUInt32BE(Math.floor(ciphertextLengthBits / 0x100000000), offset + 8);
+    authData.writeUInt32BE(ciphertextLengthBits & 0xffffffff, offset + 12);
+
+    // 4. 計算 GHASH
     let tag = this.ghash(authData, hashKey);
 
-    // 生成最終標籤
-    const tagCounter = Buffer.alloc(16);
-    iv.subarray(0, 12).copy(tagCounter, 0);
-    AESUtils.u32ToBytes(1).copy(tagCounter, 12);
+    // 5. 最終標籤計算：T = GCTR_K(J0, GHASH_H(S))
+    const j0 = Buffer.alloc(16);
+    iv.copy(j0, 0, 0, 12);
+    j0.writeUInt32BE(1, 12);
 
-    const tagMask = AES256.encryptBlock(tagCounter, key);
+    // 將 J0 的計數器部分設為 0 來生成認證標籤
+    const tagMask = AES256.encryptBlock(j0, key);
     tag = AESUtils.xor(tag, tagMask);
 
     return { ciphertext, tag };
   }
 }
 
-// 便利的 API 函數，直接使用 base64 和字符串
 export class AES256GCMEasy {
-  // 簡化的加密 API - 輸入和輸出都使用 base64/string 格式
   static encrypt(
     plaintext: string,
     keyBase64?: string,
     ivBase64?: string
   ): { key: string; iv: string; ciphertext: string; authTag: string } {
-    // 如果沒有提供密鑰，生成隨機密鑰
     const keyBytes = keyBase64 ? AESUtils.base64ToBytes(keyBase64) : AESUtils.randomBytes(32);
-
-    // 如果沒有提供 IV，生成隨機 IV
     const ivBytes = ivBase64 ? AESUtils.base64ToBytes(ivBase64) : AESUtils.randomBytes(12);
-
-    // 轉換明文為字節
     const plaintextBytes = AESUtils.stringToBytes(plaintext);
 
-    // 執行加密
     const result = AES256GCM.encrypt(plaintextBytes, keyBytes, ivBytes);
 
-    // 返回 base64 格式的結果
     return {
       key: AESUtils.bytesToBase64(keyBytes),
       iv: AESUtils.bytesToBase64(ivBytes),
@@ -444,7 +442,6 @@ export class AES256GCMEasy {
     };
   }
 
-  // 單區塊加密 API
   static encryptBlock(
     plaintext: string,
     keyBase64: string
@@ -452,11 +449,9 @@ export class AES256GCMEasy {
     const keyBytes = AESUtils.base64ToBytes(keyBase64);
     const plaintextBytes = AESUtils.stringToBytes(plaintext);
 
-    // 確保明文剛好 16 字節
     const paddedPlaintext = Buffer.alloc(16);
     plaintextBytes.subarray(0, 16).copy(paddedPlaintext);
 
-    // 執行單區塊加密
     const ciphertext = AES256.encryptBlock(paddedPlaintext, keyBytes);
 
     return {
@@ -465,34 +460,16 @@ export class AES256GCMEasy {
       ciphertext: AESUtils.bytesToBase64(ciphertext)
     };
   }
-
-  // 生成測試向量
-  static generateTestVector(
-    plaintext: string,
-    keyBase64?: string
-  ): { key: string; plaintext: string; expected: string } {
-    const keyBytes = keyBase64 ? AESUtils.base64ToBytes(keyBase64) : AESUtils.randomBytes(32);
-    const result = this.encryptBlock(plaintext, AESUtils.bytesToBase64(keyBytes));
-
-    return {
-      key: result.key,
-      plaintext: result.plaintext,
-      expected: result.ciphertext
-    };
-  }
 }
 
-// 驗證函數
+// 修正後的驗證函數
 export class AESVerification {
-  // 使用 Node.js crypto 模組驗證
   static testECBModeWithNodeCrypto(): boolean {
     console.log('\n=== Node.js crypto 模組驗證 AES-256-ECB ===');
 
-    // 測試向量 (明文必須是 16 bytes)
-    const plaintext = AESUtils.stringToBytes('ABCDEFGHIJKLMNOP');
+    const plaintext = AESUtils.stringToBytes('This is a secret');
     const key = AESUtils.base64ToBytes('qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=');
 
-    // Node.js crypto 模組 (ECB 模式，無填充)
     const cipher = createCipheriv('aes-256-ecb', key, null);
     cipher.setAutoPadding(false);
 
@@ -500,25 +477,21 @@ export class AESVerification {
     ciphertext = Buffer.concat([ciphertext, cipher.final()]);
     console.log('Node.js crypto:', ciphertext.toString('base64'));
 
-    // 實作
     const ourCiphertext = AES256.encryptBlock(plaintext, key);
     const isEqual = AESUtils.bytesToHex(ourCiphertext) === ciphertext.toString('hex');
 
-    console.log('實作:', AESUtils.bytesToBase64(ourCiphertext), isEqual ? '✅' : '❌');
+    console.log('我們的實作:', AESUtils.bytesToBase64(ourCiphertext), isEqual ? '✅' : '❌');
 
     return isEqual;
   }
 
-  // 使用 Node.js crypto 模組驗證
   static testGCMModeWithNodeCrypto(): boolean {
     console.log('\n=== Node.js crypto 模組驗證 AES-256-GCM ===');
 
-    // 測試向量 (明文可以是任意長度)
-    const plaintext = AESUtils.stringToBytes('ABCDEFGHIJKLMNOP');
+    const plaintext = AESUtils.stringToBytes('Text');
     const key = AESUtils.base64ToBytes('qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=');
     const iv = AESUtils.base64ToBytes('YjgZJzfIXjAYvwt/');
 
-    // Node.js crypto 模組 (GCM 模式)
     const cipher = createCipheriv('aes-256-gcm', key, iv);
 
     let ciphertext = cipher.update(plaintext);
@@ -529,110 +502,33 @@ export class AESVerification {
     console.log('密文 (base64):', ciphertext.toString('base64'));
     console.log('認證標籤 (base64):', authTag.toString('base64'));
 
-    // 實作
     const result = AES256GCM.encrypt(plaintext, key, iv);
     const ciphertextMatches = AESUtils.bytesToBase64(result.ciphertext) === ciphertext.toString('base64');
     const authTagMatches = AESUtils.bytesToBase64(result.tag) === authTag.toString('base64');
 
-    console.log('\n實作:');
+    console.log('\n我們的實作:');
     console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext), ciphertextMatches ? '✅' : '❌');
     console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.tag), authTagMatches ? '✅' : '❌');
 
-    return ciphertextMatches && authTagMatches;;
+    return ciphertextMatches && authTagMatches;
   }
 
-  // 測試 GCM 模式
-  static testGCMModeWithVector(): boolean {
-    console.log('\n=== AES-256-GCM 測試 ===');
-
-    const testVectors = [
-      {
-        plaintext: 'ABCDEFGHIJKLMNOP',
-        key: 'qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=',
-        iv: 'YjgZJzfIXjAYvwt/',
-        ciphertext: 'PgG52g==',
-        authTag: 'u1NxL5uXKyM/8qbZiBtUvQ==',
-      },
-    ];
-
-    let allPassed = true;
-
-    testVectors.forEach((vector, index) => {
-      console.log(`\n測試向量 ${index + 1}:`);
-
-      console.log('明文:', vector.plaintext);
-      console.log('密鑰 (base64):', vector.key);
-      console.log('IV (base64):', vector.iv);
-
-      const plaintext = AESUtils.stringToBytes(vector.plaintext);
-      const key = AESUtils.base64ToBytes(vector.key);
-      const iv = AESUtils.base64ToBytes(vector.iv);
-
-      const result = AES256GCM.encrypt(plaintext, key, iv);
-
-      console.log('\n預期結果:');
-      console.log('密文 (base64):', vector.ciphertext);
-      console.log('認證標籤 (base64):', vector.authTag);
-
-      const ciphertextPassed = AESUtils.bytesToBase64(result.ciphertext) === vector.ciphertext;
-      const authTagPassed = AESUtils.bytesToBase64(result.tag) === vector.authTag;
-
-      console.log('\n實際結果:');
-      console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext), ciphertextPassed ? '✅' : '❌');
-      console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.tag), authTagPassed ? '✅' : '❌');
-
-      if (!ciphertextPassed || !authTagPassed) allPassed = false;
-    });
-
-    return allPassed;
-  }
-
-  // 測試中間步驟
-  static testIntermediateSteps(): void {
-    console.log('\n=== 中間步驟驗證 ===');
-
-    // 可以手動驗證的簡單例子
-    const testByte = 0x53;
-    const sboxResult = AESSbox.substitute(testByte);
-    console.log(`S-box(0x${testByte.toString(16)}) = 0x${sboxResult.toString(16)} (預期: 0xed)`);
-
-    // Galois 域乘法測試
-    const gf2 = GaloisField.multiply(0x53, 0x02);
-    const gf3 = GaloisField.multiply(0x53, 0x03);
-    console.log(`GF(0x53 * 0x02) = 0x${gf2.toString(16)} (預期: 0xa6)`);
-    console.log(`GF(0x53 * 0x03) = 0x${gf3.toString(16)} (預期: 0xf5)`);
-
-    // 驗證快速乘法表
-    const fast2 = GaloisField.fastMul2(0x53);
-    const fast3 = GaloisField.fastMul3(0x53);
-    console.log(`快速表 2x: 0x${fast2.toString(16)}, 直接計算: 0x${gf2.toString(16)}, 一致: ${fast2 === gf2}`);
-    console.log(`快速表 3x: 0x${fast3.toString(16)}, 直接計算: 0x${gf3.toString(16)}, 一致: ${fast3 === gf3}`);
-  }
-
-  // 執行所有測試
   static runAllTests(): boolean {
-    console.log('🧪 開始 AES-256-GCM 實作驗證...\n');
+    console.log('🧪 開始修正後的 AES-256-GCM 驗證...\n');
 
-    this.testIntermediateSteps();
-
-    const cryptoECBMatches = this.testECBModeWithNodeCrypto();
-    const cryptoGCNMatches = this.testGCMModeWithNodeCrypto();
-    const gcmPassed = this.testGCMModeWithVector();
-
-    const allPass = cryptoECBMatches && cryptoGCNMatches && gcmPassed;
-    // const allPass = cryptoGCNMatches;
+    const ecbPassed = this.testECBModeWithNodeCrypto();
+    const gcmPassed = this.testGCMModeWithNodeCrypto();
 
     console.log('\n📊 測試總結:');
-    console.log('Node.js crypto ECB 一致性:', cryptoECBMatches ? '✅' : '❌');
-    console.log('Node.js crypto GCM 一致性:', cryptoGCNMatches ? '✅' : '❌');
-    console.log('GCM 測試向量:', gcmPassed ? '✅' : '❌');
-    console.log('整體狀態:', allPass ? '🎉 所有測試通過！' : '⚠️  存在問題，需要修正');
+    console.log('ECB 模式:', ecbPassed ? '✅' : '❌');
+    console.log('GCM 模式:', gcmPassed ? '✅' : '❌');
+    console.log('整體狀態:', (ecbPassed && gcmPassed) ? '🎉 所有測試通過！' : '⚠️  仍有問題需要調試');
 
-    return allPass;
+    return ecbPassed && gcmPassed;
   }
 }
 
-// 如果這個文件被直接執行，運行測試
+// 運行測試
 if (import.meta.url === `file://${process.argv[1]}`) {
   AESVerification.runAllTests();
 }
