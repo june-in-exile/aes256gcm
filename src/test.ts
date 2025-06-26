@@ -24,7 +24,7 @@ function simpleUsageExample() {
   console.log('密鑰 (base64):', result1.key);
   console.log('IV (base64):', result1.iv);
   console.log('密文 (base64):', result1.ciphertext);
-  console.log('標籤 (base64):', result1.tag);
+  console.log('標籤 (base64):', result1.authTag);
 
   // 使用指定密鑰
   const fixedKey = 'dGVzdEtleTEyMzQ1Njc4OTBhYmNkZWZnaGlqa2xtbm8=';
