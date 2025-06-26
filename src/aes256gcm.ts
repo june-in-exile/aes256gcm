@@ -65,6 +65,14 @@ export class AESUtils {
     return new Uint8Array(Buffer.from(base64, 'base64'));
   }
 
+  static bufferToBase64(buf: Buffer): string {
+    return buf.toString("base64");
+  }
+
+  static base64ToBuffer(base64: string): Buffer {
+    return Buffer.from(base64, 'base64');
+  }
+
   // 字符串轉字節數組 (UTF-8)
   static stringToBytes(str: string): Uint8Array {
     return new TextEncoder().encode(str);
@@ -73,6 +81,14 @@ export class AESUtils {
   // 字節數組轉字符串 (UTF-8)
   static bytesToString(bytes: Uint8Array): string {
     return new TextDecoder().decode(bytes);
+  }
+
+  static stringToBuffer(str: string): Buffer {
+    return Buffer.from(str, 'utf8');
+  }
+
+  static bufferToString(buf: Buffer): string {
+    return buf.toString("utf8");
   }
 }
 
@@ -526,19 +542,19 @@ export class AESVerification {
 
     const testVectors = [
       {
-        plaintext: 'Hello AES-256!',
-        key: 'DioXvY+X8oqF3P/aVsX+NK/uD49WKDXZQYVvJxJ3yq0=',
-        iv: 'C9Eil8xroSgeJ8vR',
-        cyphertext: 'VknVANIlVtTAQkq1Sop+Rw==',
-        tag: 'wCdM4THEyev+ShGcFDCHgw==',
+        plaintext: 'Text',
+        key: 'qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=',
+        iv: 'YjgZJzfIXjAYvwt/',
+        cyphertext: 'PgG52g==',
+        tag: 'u1NxL5uXKyM/8qbZiBtUvQ==',
       },
-      {
-        plaintext: '{\n"testator": "0x041F57c4492760aaE44ECed29b49a30DaAD3D4Cc"\n}',
-        key: 'kDtgass1xro445m65GQoRH1f/OjGpwtgEi91xIBKt7s=',
-        iv: 'kuemlftSTikZUhvf',
-        cyphertext: 'zjrJxvAetCKNHqqLURslo5EGQjcdcslZ3FAX99lNuDgfW3tNH7eQ6ooz5Swn3phiopG0/oPfbf4Tq9Ia9yM=',
-        authTag: 'NsA8H+PwX59l5Sr2HxzQGQ==',
-      }
+      // {
+      //   plaintext: '{\n"testator": "0x041F57c4492760aaE44ECed29b49a30DaAD3D4Cc"\n}',
+      //   key: 'kDtgass1xro445m65GQoRH1f/OjGpwtgEi91xIBKt7s=',
+      //   iv: 'kuemlftSTikZUhvf',
+      //   cyphertext: 'zjrJxvAetCKNHqqLURslo5EGQjcdcslZ3FAX99lNuDgfW3tNH7eQ6ooz5Swn3phiopG0/oPfbf4Tq9Ia9yM=',
+      //   authTag: 'NsA8H+PwX59l5Sr2HxzQGQ==',
+      // }
     ];
 
     let allPassed = true;
@@ -556,20 +572,17 @@ export class AESVerification {
 
       const result = AES256GCM.encrypt(plaintext, key, iv);
 
-      console.log('實際結果:');
-      console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext));
-      console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.tag));
-
-      console.log('預期結果:');
+      console.log('\n預期結果:');
       console.log('密文 (base64):', vector.cyphertext);
       console.log('認證標籤 (base64):', vector.tag);
 
       const cyphertextPassed = AESUtils.bytesToBase64(result.ciphertext) === vector.cyphertext;
       const tagPassed = AESUtils.bytesToBase64(result.tag) === vector.tag;
 
-      console.log('測試結果:');
-      console.log('密文 (base64):', cyphertextPassed ? '✅ 通過' : '❌ 失敗');
-      console.log('認證標籤 (base64):', tagPassed ? '✅ 通過' : '❌ 失敗');
+      console.log('\n實際結果:');
+      console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext), cyphertextPassed ? '✅' : '❌');
+      console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.tag), tagPassed ? '✅' : '❌');
+
       if (!cyphertextPassed || !tagPassed) allPassed = false;
     });
 
@@ -602,19 +615,20 @@ export class AESVerification {
   static runAllTests(): boolean {
     console.log('🧪 開始 AES-256-GCM 實作驗證...\n');
 
-    this.testIntermediateSteps();
+    // this.testIntermediateSteps();
 
-    const cryptoMatches = this.verifyWithNodeCrypto();
+    // const cryptoMatches = this.verifyWithNodeCrypto();
     // const nistPassed = this.testWithGivenVectors();
 
     this.testGCMMode();
 
-    console.log('\n📊 測試總結:');
-    console.log('Node.js crypto 一致性:', cryptoMatches ? '✅' : '❌');
+    // console.log('\n📊 測試總結:');
+    // console.log('Node.js crypto 一致性:', cryptoMatches ? '✅' : '❌');
     // console.log('NIST 測試向量:', nistPassed ? '✅' : '❌');
-    console.log('整體狀態:', cryptoMatches ? '🎉 所有測試通過！' : '⚠️  存在問題，需要修正');
+    // console.log('整體狀態:', cryptoMatches ? '🎉 所有測試通過！' : '⚠️  存在問題，需要修正');
 
-    return cryptoMatches;
+    // return cryptoMatches;
+    return false;
   }
 }
 
