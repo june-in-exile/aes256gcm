@@ -381,7 +381,6 @@ export class AES256GCM {
     iv: Buffer,
     additionalData: Buffer = Buffer.alloc(0)
   ): { ciphertext: Buffer; tag: Buffer } {
-
     if (key.length !== 32) {
       throw new Error('AES-256-GCM requires a 32-byte key');
     }
@@ -485,26 +484,23 @@ export class AESVerification {
   static testECBModeWithNodeCrypto(): boolean {
     console.log('\n=== Node.js crypto 模組驗證 AES-256-ECB ===');
 
-    // 測試向量
+    // 測試向量 (明文必須是 16 bytes)
+    const plaintext = AESUtils.stringToBytes('ABCDEFGHIJKLMNOP');
     const key = AESUtils.base64ToBytes('qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=');
-    // 明文必須是 16 bytes
-    const plaintext = AESUtils.stringToBytes('This is a secret');
-
-    // 我們的實作
-    const ourCiphertext = AES256.encryptBlock(plaintext, key);
-    console.log('我們的實作:', AESUtils.bytesToBase64(ourCiphertext));
 
     // Node.js crypto 模組 (ECB 模式，無填充)
     const cipher = createCipheriv('aes-256-ecb', key, null);
     cipher.setAutoPadding(false);
 
-    let nodeCiphertext = cipher.update(plaintext);
-    nodeCiphertext = Buffer.concat([nodeCiphertext, cipher.final()]);
-    console.log('Node.js crypto:', nodeCiphertext.toString('base64'));
+    let ciphertext = cipher.update(plaintext);
+    ciphertext = Buffer.concat([ciphertext, cipher.final()]);
+    console.log('Node.js crypto:', ciphertext.toString('base64'));
 
-    // 比較結果
-    const isEqual = AESUtils.bytesToHex(ourCiphertext) === nodeCiphertext.toString('hex');
-    console.log('結果一致:', isEqual ? '✅ 是' : '❌ 否');
+    // 實作
+    const ourCiphertext = AES256.encryptBlock(plaintext, key);
+    const isEqual = AESUtils.bytesToHex(ourCiphertext) === ciphertext.toString('hex');
+
+    console.log('實作:', AESUtils.bytesToBase64(ourCiphertext), isEqual ? '✅' : '❌');
 
     return isEqual;
   }
@@ -513,37 +509,32 @@ export class AESVerification {
   static testGCMModeWithNodeCrypto(): boolean {
     console.log('\n=== Node.js crypto 模組驗證 AES-256-GCM ===');
 
-    // 測試向量
+    // 測試向量 (明文可以是任意長度)
+    const plaintext = AESUtils.stringToBytes('ABCDEFGHIJKLMNOP');
     const key = AESUtils.base64ToBytes('qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=');
     const iv = AESUtils.base64ToBytes('YjgZJzfIXjAYvwt/');
-    // 明文可以是任意長度
-    const plaintext = AESUtils.stringToBytes('Text');
-
-    // 我們的實作
-    const result = AES256GCM.encrypt(plaintext, key, iv);
-    console.log('我們的實作:');
-    console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext));
-    console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.tag));
 
     // Node.js crypto 模組 (GCM 模式)
     const cipher = createCipheriv('aes-256-gcm', key, iv);
 
-    let nodeCiphertext = cipher.update(plaintext);
-    nodeCiphertext = Buffer.concat([nodeCiphertext, cipher.final()]);
+    let ciphertext = cipher.update(plaintext);
+    ciphertext = Buffer.concat([ciphertext, cipher.final()]);
     const authTag = cipher.getAuthTag();
 
     console.log('\nNode.js crypto:');
-    console.log('密文 (base64):', nodeCiphertext.toString('base64'));
+    console.log('密文 (base64):', ciphertext.toString('base64'));
     console.log('認證標籤 (base64):', authTag.toString('base64'));
 
-    // 比較結果
-    const ciphertextMatches = AESUtils.bytesToBase64(result.ciphertext) === nodeCiphertext.toString('base64');
+    // 實作
+    const result = AES256GCM.encrypt(plaintext, key, iv);
+    const ciphertextMatches = AESUtils.bytesToBase64(result.ciphertext) === ciphertext.toString('base64');
     const authTagMatches = AESUtils.bytesToBase64(result.tag) === authTag.toString('base64');
 
-    const isEqual = ciphertextMatches && authTagMatches;
-    console.log('結果一致:', isEqual ? '✅ 是' : '❌ 否');
+    console.log('\n實作:');
+    console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext), ciphertextMatches ? '✅' : '❌');
+    console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.tag), authTagMatches ? '✅' : '❌');
 
-    return isEqual;
+    return ciphertextMatches && authTagMatches;;
   }
 
   // 測試 GCM 模式
@@ -552,7 +543,7 @@ export class AESVerification {
 
     const testVectors = [
       {
-        plaintext: 'Text',
+        plaintext: 'ABCDEFGHIJKLMNOP',
         key: 'qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=',
         iv: 'YjgZJzfIXjAYvwt/',
         ciphertext: 'PgG52g==',
@@ -572,10 +563,6 @@ export class AESVerification {
       const plaintext = AESUtils.stringToBytes(vector.plaintext);
       const key = AESUtils.base64ToBytes(vector.key);
       const iv = AESUtils.base64ToBytes(vector.iv);
-
-      console.log("\nplaintext:", plaintext);
-      console.log("key:", key);
-      console.log("iv:", iv);
 
       const result = AES256GCM.encrypt(plaintext, key, iv);
 
@@ -629,6 +616,7 @@ export class AESVerification {
     const gcmPassed = this.testGCMModeWithVector();
 
     const allPass = cryptoECBMatches && cryptoGCNMatches && gcmPassed;
+    // const allPass = cryptoGCNMatches;
 
     console.log('\n📊 測試總結:');
     console.log('Node.js crypto ECB 一致性:', cryptoECBMatches ? '✅' : '❌');
