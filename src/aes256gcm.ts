@@ -296,7 +296,6 @@ export class GF128 {
 }
 
 export class AES256GCM {
-  // 修正：正確的 CTR 模式實作
   static ctrEncrypt(plaintext: Buffer, key: Buffer, iv: Buffer): Buffer {
     if (iv.length !== 12) {
       throw new Error('IV must be exactly 12 bytes for GCM');
@@ -462,7 +461,6 @@ export class AES256GCMEasy {
   }
 }
 
-// 修正後的驗證函數
 export class AESVerification {
   static testECBModeWithNodeCrypto(): boolean {
     console.log('\n=== Node.js crypto 模組驗證 AES-256-ECB ===');
@@ -514,7 +512,7 @@ export class AESVerification {
   }
 
   static runAllTests(): boolean {
-    console.log('🧪 開始修正後的 AES-256-GCM 驗證...\n');
+    console.log('🧪 開始 AES-256-GCM 驗證...\n');
 
     const ecbPassed = this.testECBModeWithNodeCrypto();
     const gcmPassed = this.testGCMModeWithNodeCrypto();

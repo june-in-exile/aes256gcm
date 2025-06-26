@@ -1,5 +1,6 @@
 /**
- * AES-256-GCM 使用範例和測試
+ * AES-256-GCM 測試套件
+ * 對應最新版本的實作
  */
 
 import {
@@ -9,6 +10,7 @@ import {
   AESUtils,
   AESVerification,
   GaloisField,
+  GF128,
   AESTransforms
 } from './aes256gcm.js';
 import { createCipheriv } from 'crypto';
@@ -24,15 +26,18 @@ function simpleUsageExample() {
   console.log('密鑰 (base64):', result1.key);
   console.log('IV (base64):', result1.iv);
   console.log('密文 (base64):', result1.ciphertext);
-  console.log('標籤 (base64):', result1.authTag);
+  console.log('認證標籤 (base64):', result1.authTag);
 
   // 使用指定密鑰
-  const fixedKey = 'dGVzdEtleTEyMzQ1Njc4OTBhYmNkZWZnaGlqa2xtbm8=';
-  const result2 = AES256GCMEasy.encrypt('Hello, Fixed Key!', fixedKey);
-  console.log('\n使用固定密鑰加密:');
-  console.log('明文:', 'Hello, Fixed Key!');
+  const fixedKey = 'qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=';
+  const fixedIv = 'YjgZJzfIXjAYvwt/';
+  const result2 = AES256GCMEasy.encrypt('Text', fixedKey, fixedIv);
+  console.log('\n使用固定密鑰和IV加密:');
+  console.log('明文:', 'Text');
   console.log('密鑰 (base64):', result2.key);
+  console.log('IV (base64):', result2.iv);
   console.log('密文 (base64):', result2.ciphertext);
+  console.log('認證標籤 (base64):', result2.authTag);
 
   // 單區塊加密
   const blockResult = AES256GCMEasy.encryptBlock('Test Block 16B!!', fixedKey);
@@ -40,15 +45,12 @@ function simpleUsageExample() {
   console.log('明文:', blockResult.plaintext);
   console.log('密文 (base64):', blockResult.ciphertext);
 
-  // 生成測試向量
-  const testVector = AES256GCMEasy.generateTestVector('ZKP Test Block!!');
-  console.log('\n生成的測試向量:');
-  console.log('測試向量:', JSON.stringify(testVector, null, 2));
-
-  return { result1, result2, blockResult, testVector };
+  return { result1, result2, blockResult };
 }
+
+// 基本使用範例
 function basicUsageExample() {
-  console.log('🚀 基本使用範例\n');
+  console.log('\n🚀 基本使用範例\n');
 
   // 1. 生成隨機密鑰和 IV
   const key = AESUtils.randomBytes(32);  // 256 位密鑰
@@ -85,7 +87,7 @@ function singleBlockExample() {
   console.log('\n📦 單區塊 AES-256 測試\n');
 
   // 使用已知測試向量 (base64 格式)
-  const key = 'YD3rEBXKcb4rc67whX13gR8zLAc7YQjXLZgQowkU3/Q='; // 603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4
+  const key = 'qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=';
   const plaintext = 'Test AES Block!!'; // 剛好 16 字節
 
   console.log('密鑰 (base64):', key);
@@ -95,16 +97,14 @@ function singleBlockExample() {
   const plaintextBytes = AESUtils.stringToBytes(plaintext);
 
   // 確保明文剛好 16 字節
-  const paddedPlaintext = new Uint8Array(16);
-  paddedPlaintext.set(plaintextBytes.slice(0, 16));
+  const paddedPlaintext = Buffer.alloc(16);
+  plaintextBytes.subarray(0, 16).copy(paddedPlaintext);
 
   // 單區塊加密
   const ciphertext = AES256.encryptBlock(paddedPlaintext, keyBytes);
   const result = AESUtils.bytesToBase64(ciphertext);
 
   console.log('密文 (base64):', result);
-
-  // 這裡可以記錄預期結果用於後續驗證
   console.log('✅ 加密完成');
 }
 
@@ -134,6 +134,13 @@ function stepByStepTest() {
   console.log('GF(0x53 * 0x03) =', GaloisField.multiply(0x53, 0x03).toString(16));
   console.log('快速表 2x =', GaloisField.fastMul2(0x53).toString(16));
   console.log('快速表 3x =', GaloisField.fastMul3(0x53).toString(16));
+
+  // 測試 GF(2^128) 運算
+  console.log('\nGF(2^128) 運算測試:');
+  const x = Buffer.from('01234567890abcdef0123456789abcde', 'hex');
+  const y = Buffer.from('fedcba0987654321fedcba0987654321', 'hex');
+  const product = GF128.multiply(x, y);
+  console.log('GF128 乘法結果:', AESUtils.bytesToHex(product));
 }
 
 // 生成 ZKP 電路測試向量
@@ -148,9 +155,9 @@ function generateZKPTestVectors() {
       plaintext: 'Hello AES World!'
     },
     {
-      name: 'NIST Test Vector',
-      key: 'YD3rEBXKcb4rc67whX13gR8zLAc7YQjXLZgQowkU3/Q=',
-      plaintext: 'NIST Test Block!'
+      name: 'Known Vector',
+      key: 'qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=',
+      plaintext: 'Test Vector Data'
     },
     {
       name: 'Zero Key Test',
@@ -177,8 +184,8 @@ function generateZKPTestVectors() {
     const plaintextBytes = AESUtils.stringToBytes(testCase.plaintext);
 
     // 確保明文剛好 16 字節
-    const paddedPlaintext = new Uint8Array(16);
-    paddedPlaintext.set(plaintextBytes.slice(0, 16));
+    const paddedPlaintext = Buffer.alloc(16);
+    plaintextBytes.subarray(0, 16).copy(paddedPlaintext);
 
     const ciphertext = AES256.encryptBlock(paddedPlaintext, keyBytes);
     const ciphertextBase64 = AESUtils.bytesToBase64(ciphertext);
@@ -196,15 +203,21 @@ function generateZKPTestVectors() {
   const gcmTestCases = [
     {
       name: 'GCM Simple Test',
-      key: 'dGVzdEtleTEyMzQ1Njc4OTBhYmNkZWZnaGlqa2xtbm8=',
-      iv: 'dGVzdEl2MTIzNA==', // 12 字節 IV
-      plaintext: 'Hello GCM World!'
+      key: 'qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=',
+      iv: 'YjgZJzfIXjAYvwt/', // 12 字節 IV
+      plaintext: 'Text'
     },
     {
       name: 'GCM Long Message',
       key: 'bXlTZWNyZXRLZXkxMjM0NTY3ODkwYWJjZGVmZ2hpams=',
-      iv: 'cmFuZG9tSXZAIyQ=',
+      iv: 'lV8jzMw8l38VL+kA',
       plaintext: 'This is a longer message for GCM testing!'
+    },
+    {
+      name: 'GCM Empty Message',
+      key: 'dGVzdEtleTEyMzQ1Njc4OTBhYmNkZWZnaGlqa2xtbm8=',
+      iv: 'lV8jzMw8l38VL+kA',
+      plaintext: ''
     }
   ];
 
@@ -221,7 +234,7 @@ function generateZKPTestVectors() {
     console.log(`  iv: "${testCase.iv}",`);
     console.log(`  plaintext: "${testCase.plaintext}",`);
     console.log(`  expectedCiphertext: "${AESUtils.bytesToBase64(result.ciphertext)}",`);
-    console.log(`  expectedTag: "${AESUtils.bytesToBase64(result.tag)}"`);
+    console.log(`  expectedAuthTag: "${AESUtils.bytesToBase64(result.tag)}"`);
     console.log('};\n');
   });
 }
@@ -231,7 +244,7 @@ function performanceTest() {
   console.log('\n⚡ 性能測試\n');
 
   const key = AESUtils.randomBytes(32);
-  const plaintext = AESUtils.randomBytes(16);
+  const plaintext = Buffer.alloc(16, 0x41); // 16字節的'A'
 
   const iterations = 10000;
 
@@ -251,7 +264,7 @@ function performanceTest() {
   console.log(`吞吐量: ${(iterations / totalTime * 1000).toFixed(0)} 次/秒`);
 
   // GCM 模式性能測試
-  const gcmPlaintext = AESUtils.randomBytes(64); // 64 字節
+  const gcmPlaintext = Buffer.alloc(64, 0x42); // 64 字節
   const iv = AESUtils.randomBytes(12);
   const gcmIterations = 1000;
 
@@ -271,12 +284,12 @@ function performanceTest() {
   console.log(`GCM 吞吐量: ${(gcmIterations / gcmTotalTime * 1000).toFixed(0)} 次/秒`);
 }
 
-// 與 Node.js crypto 比較
+// 與 Node.js crypto 性能比較
 async function compareWithNodeCrypto() {
   console.log('\n🔍 與 Node.js crypto 性能比較\n');
 
   const key = AESUtils.randomBytes(32);
-  const plaintext = AESUtils.randomBytes(1024); // 1KB 數據
+  const plaintext = Buffer.alloc(1024, 0x55); // 1KB 數據
   const iv = AESUtils.randomBytes(12);
 
   const iterations = 1000;
@@ -315,7 +328,7 @@ function errorHandlingTest() {
   try {
     // 錯誤的密鑰長度
     const wrongKey = AESUtils.randomBytes(16); // 應該是 32 字節
-    const plaintext = AESUtils.randomBytes(16);
+    const plaintext = Buffer.alloc(16);
     AES256.encryptBlock(plaintext, wrongKey);
     console.log('❌ 應該要拋出錯誤但沒有');
   } catch (error) {
@@ -325,7 +338,7 @@ function errorHandlingTest() {
   try {
     // 錯誤的明文長度
     const key = AESUtils.randomBytes(32);
-    const wrongPlaintext = AESUtils.randomBytes(15); // 應該是 16 字節
+    const wrongPlaintext = Buffer.alloc(15); // 應該是 16 字節
     AES256.encryptBlock(wrongPlaintext, key);
     console.log('❌ 應該要拋出錯誤但沒有');
   } catch (error) {
@@ -335,12 +348,23 @@ function errorHandlingTest() {
   try {
     // GCM 模式錯誤的密鑰長度
     const wrongKey = AESUtils.randomBytes(16);
-    const plaintext = AESUtils.randomBytes(32);
+    const plaintext = Buffer.alloc(32);
     const iv = AESUtils.randomBytes(12);
     AES256GCM.encrypt(plaintext, wrongKey, iv);
     console.log('❌ 應該要拋出錯誤但沒有');
   } catch (error) {
     console.log('✅ 正確捕獲 GCM 密鑰長度錯誤:', (error as Error).message);
+  }
+
+  try {
+    // GCM 模式錯誤的 IV 長度
+    const key = AESUtils.randomBytes(32);
+    const plaintext = Buffer.alloc(32);
+    const wrongIv = AESUtils.randomBytes(16); // 應該是 12 字節
+    AES256GCM.encrypt(plaintext, key, wrongIv);
+    console.log('❌ 應該要拋出錯誤但沒有');
+  } catch (error) {
+    console.log('✅ 正確捕獲 GCM IV 長度錯誤:', (error as Error).message);
   }
 }
 
@@ -376,7 +400,7 @@ function realWorldExample() {
   console.log('密文 (base64):', AESUtils.bytesToBase64(encrypted.ciphertext));
   console.log('認證標籤 (base64):', AESUtils.bytesToBase64(encrypted.tag));
 
-  // 顯示壓縮比
+  // 顯示大小比較
   const originalSize = plaintextBytes.length;
   const encryptedSize = encrypted.ciphertext.length + encrypted.tag.length;
   console.log(`\n大小比較: 原始 ${originalSize} 字節 -> 加密 ${encryptedSize} 字節 (不含密鑰和IV)`);
@@ -387,7 +411,7 @@ function realWorldExample() {
     iv: AESUtils.bytesToBase64(iv),
     plaintext: dataString,
     ciphertext: AESUtils.bytesToBase64(encrypted.ciphertext),
-    tag: AESUtils.bytesToBase64(encrypted.tag)
+    authTag: AESUtils.bytesToBase64(encrypted.tag)
   };
 }
 
@@ -408,7 +432,7 @@ function memoryUsageTest() {
   console.log(`執行 ${iterations} 次加密操作...`);
 
   for (let i = 0; i < iterations; i++) {
-    const plaintext = AESUtils.randomBytes(16);
+    const plaintext = Buffer.alloc(16, i % 256);
     AES256.encryptBlock(plaintext, key);
 
     // 每 10000 次檢查一次內存
@@ -428,67 +452,110 @@ function memoryUsageTest() {
   console.log('內存增長:', Math.round(memoryIncrease / 1024 / 1024) + ' MB');
 }
 
+// 驗證修正後的實作
+function extraVerification() {
+  console.log('\n🔧 測資驗證\n');
+
+  // 測試已知向量
+  const testVector = {
+    plaintext: 'Text',
+    key: 'qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=',
+    iv: 'YjgZJzfIXjAYvwt/',
+    expectedCiphertext: 'PgG52g==',
+    expectedAuthTag: 'u1NxL5uXKyM/8qbZiBtUvQ=='
+  };
+
+  const plaintext = AESUtils.stringToBytes(testVector.plaintext);
+  const key = AESUtils.base64ToBytes(testVector.key);
+  const iv = AESUtils.base64ToBytes(testVector.iv);
+
+  const result = AES256GCM.encrypt(plaintext, key, iv);
+
+  console.log('測試向量驗證:');
+  console.log('明文:', testVector.plaintext);
+  console.log('密鑰 (base64):', testVector.key);
+  console.log('IV (base64):', testVector.iv);
+
+  const ciphertextMatch = AESUtils.bytesToBase64(result.ciphertext) === testVector.expectedCiphertext;
+  const authTagMatch = AESUtils.bytesToBase64(result.tag) === testVector.expectedAuthTag;
+
+  console.log('\n預期結果:');
+  console.log('密文 (base64):', testVector.expectedCiphertext);
+  console.log('認證標籤 (base64):', testVector.expectedAuthTag);
+
+  console.log('\n實際結果:');
+  console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext), ciphertextMatch ? '✅' : '❌');
+  console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.tag), authTagMatch ? '✅' : '❌');
+}
+
 // 主測試函數
 async function main() {
   console.log('🧪 AES-256-GCM 完整測試套件\n');
   console.log('='.repeat(60));
 
-  // 1. 運行驗證測試
-  console.log('\n📋 第一部分：驗證測試');
+  // 1. 運行官方驗證測試
+  console.log('\n📋 第一部分：官方驗證測試');
   AESVerification.runAllTests();
 
   console.log('\n' + '='.repeat(60));
 
-  // 2. 簡化 API 範例
+  // 2. 驗證修正後的實作
+  console.log('\n📋 第二部分：額外驗證');
+  extraVerification();
+
+  console.log('\n' + '='.repeat(60));
+
+  // 3. 簡化 API 範例
+  console.log('\n📋 第三部分：使用範例');
   simpleUsageExample();
 
-  // 3. 基本使用範例
-  console.log('\n📋 第二部分：使用範例');
+  // 4. 基本使用範例
   basicUsageExample();
 
-  // 4. 單區塊測試
+  // 5. 單區塊測試
   singleBlockExample();
 
-  // 5. 步驟測試
+  // 6. 步驟測試
   stepByStepTest();
 
   console.log('\n' + '='.repeat(60));
 
-  // 6. 生成 ZKP 測試向量
-  console.log('\n📋 第三部分：ZKP 電路支援');
+  // 7. 生成 ZKP 測試向量
+  console.log('\n📋 第四部分：ZKP 電路支援');
   generateZKPTestVectors();
 
   console.log('\n' + '='.repeat(60));
 
-  // 7. 性能測試
-  console.log('\n📋 第四部分：性能測試');
+  // 8. 性能測試
+  console.log('\n📋 第五部分：性能測試');
   performanceTest();
 
-  // 8. 與 Node.js 比較
+  // 9. 與 Node.js 比較
   await compareWithNodeCrypto();
 
   console.log('\n' + '='.repeat(60));
 
-  // 9. 實際使用案例
-  console.log('\n📋 第五部分：實際應用');
+  // 10. 實際使用案例
+  console.log('\n📋 第六部分：實際應用');
   realWorldExample();
 
   console.log('\n' + '='.repeat(60));
 
-  // 10. 錯誤處理測試
-  console.log('\n📋 第六部分：錯誤處理');
+  // 11. 錯誤處理測試
+  console.log('\n📋 第七部分：錯誤處理');
   errorHandlingTest();
 
   console.log('\n' + '='.repeat(60));
 
-  // 11. 內存使用測試
-  console.log('\n📋 第七部分：內存測試');
+  // 12. 內存使用測試
+  console.log('\n📋 第八部分：內存測試');
   memoryUsageTest();
 
   console.log('\n🎉 所有測試完成！');
   console.log('\n💡 提示：');
   console.log('- 使用生成的測試向量來驗證您的 Circom 電路');
   console.log('- 參考性能數據來優化電路設計');
+  console.log('- 修正後的實作應該與 Node.js crypto 完全一致');
   console.log('- 確保錯誤處理在電路中也有對應的約束');
 }
 
@@ -498,6 +565,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 
 export {
+  extraVerification,
   simpleUsageExample,
   basicUsageExample,
   singleBlockExample,
