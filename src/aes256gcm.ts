@@ -321,6 +321,10 @@ export class AES256 {
 export class AES256GCM {
   // 計數器模式加密
   static ctrEncrypt(plaintext: Buffer, key: Buffer, iv: Buffer): Buffer {
+    console.log("plaintext:", plaintext);
+    console.log("key:", key);
+    console.log("iv:", iv);
+
     const numBlocks = Math.ceil(plaintext.length / 16);
     const ciphertext = Buffer.alloc(plaintext.length);
 
