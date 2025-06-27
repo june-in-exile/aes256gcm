@@ -364,7 +364,7 @@ export class AES256GCM {
       throw new Error('IV must be exactly 12 bytes');
     }
 
-    // 1. 生成 hash subkey: H = E_K(0^128)
+    // 1. 生成 hash subkey: H = CIPH_K(0^128)
     const zeroBlock = Buffer.alloc(16);
     const hashKey = AES256.encryptBlock(zeroBlock, key);
 
@@ -411,14 +411,11 @@ export class AES256GCM {
     // 計算 GHASH
     let S = this.ghash(authData, hashKey);
 
-    // 6. 最終標籤計算：T = GCTR_K(J0, GHASH_H(S))
-
-    // S = this.ctrEncrypt(S, key, j0);
-
-
+    // 6. 最終標籤計算：T = GCTR_K(J0, S) = S xor CIPH_K(J0)
     const tagMask = AES256.encryptBlock(j0, key);
     S = AESUtils.xor(S, tagMask);
 
+    // 7. 返回密文及標籤
     return { ciphertext, authTag: S };
   }
 }
