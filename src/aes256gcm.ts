@@ -1,5 +1,5 @@
 /**
- * AES-256-GCM TypeScript 實作
+ * AES-256-GCM TypeScript 實作 (修正版 - 支援任意長度 IV)
  */
 
 import { createCipheriv } from 'crypto';
@@ -351,6 +351,48 @@ export class AES256GCM {
     return result;
   }
 
+  /**
+   * 計算 J0 值，支援任意長度的 IV
+   * 根據 NIST SP 800-38D 標準：
+   * - 如果 IV 長度為 96 位 (12 字節)：J0 = IV || 0x00000001
+   * - 否則：J0 = GHASH_H(IV || 0^(s+64) || [len(IV)]64)
+   */
+  static computeJ0(iv: Buffer, hashKey: Buffer): Buffer {
+    if (iv.length === 12) {
+      // 標準情況：IV 為 12 字節
+      const j0 = Buffer.alloc(16);
+      iv.copy(j0, 0, 0, 12);
+      j0.writeUInt32BE(1, 12); // J0 = IV || 0x00000001
+      return j0;
+    } else {
+      // 非標準情況：使用 GHASH 計算 J0
+      // 計算需要的 padding
+      const s = (128 - (iv.length * 8) % 128) % 128; // padding 到 128 位邊界
+      const paddingBytes = Math.floor(s / 8);
+
+      // 構建 GHASH 輸入：IV || 0^(s+64) || [len(IV)]64
+      const ghashInputLength = iv.length + paddingBytes + 8 + 8; // +8 for zero padding, +8 for length
+      const ghashInput = Buffer.alloc(ghashInputLength);
+
+      let offset = 0;
+
+      // 複製 IV
+      iv.copy(ghashInput, offset);
+      offset += iv.length;
+
+      // 添加 padding 到 128 位邊界 + 額外 64 位零
+      offset += paddingBytes + 8; // 跳過零填充部分
+
+      // 添加 IV 長度（以位為單位，64位大端序）
+      const ivLengthBits = iv.length * 8;
+      ghashInput.writeUInt32BE(Math.floor(ivLengthBits / 0x100000000), offset);
+      ghashInput.writeUInt32BE(ivLengthBits & 0xffffffff, offset + 4);
+
+      // 使用 GHASH 計算 J0
+      return this.ghash(ghashInput, hashKey);
+    }
+  }
+
   static encrypt(
     plaintext: Buffer,
     key: Buffer,
@@ -360,22 +402,13 @@ export class AES256GCM {
     if (key.length !== 32) {
       throw new Error('AES-256-GCM requires a 32-byte key');
     }
-    if (iv.length !== 12) {
-      throw new Error('IV must be exactly 12 bytes');
-    }
 
     // 1. 生成 hash subkey: H = CIPH_K(0^128)
     const zeroBlock = Buffer.alloc(16);
     const hashKey = AES256.encryptBlock(zeroBlock, key);
 
-    // 2. 計算 J0
-    const j0 = Buffer.alloc(16);
-    if (iv.length == 12) {
-      iv.copy(j0, 0, 0, 12);
-      j0.writeUInt32BE(1, 12); // J0 = IV || 0x00000001
-    } else {
-      throw new Error('IV must be exactly 12 bytes for GCM');
-    }
+    // 2. 計算 J0（支援任意長度 IV）
+    const j0 = this.computeJ0(iv, hashKey);
 
     // 3. CTR 模式加密
     const ciphertext = this.ctrEncrypt(plaintext, key, j0);
@@ -461,7 +494,7 @@ export class AES256GCMEasy {
 }
 
 export class AESVerification {
-  static testECBModeWithNodeCrypto(): boolean {
+  static testECBMode(): boolean {
     console.log('\n=== Node.js crypto 模組驗證 AES-256-ECB ===');
 
     const plaintext = AESUtils.stringToBytes('This is a secret');
@@ -482,8 +515,8 @@ export class AESVerification {
     return isEqual;
   }
 
-  static testGCMModeWithNodeCrypto(): boolean {
-    console.log('\n=== Node.js crypto 模組驗證 AES-256-GCM ===');
+  static testGCMMode(): boolean {
+    console.log('\n=== Node.js crypto 模組驗證 AES-256-GCM (12 字節 IV) ===');
 
     const plaintext = AESUtils.stringToBytes('Text');
     const key = AESUtils.base64ToBytes('qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=');
@@ -513,15 +546,16 @@ export class AESVerification {
   static runAllTests(): boolean {
     console.log('🧪 開始 AES-256-GCM 驗證...\n');
 
-    const ecbPassed = this.testECBModeWithNodeCrypto();
-    const gcmPassed = this.testGCMModeWithNodeCrypto();
+    const ecbPassed = this.testECBMode();
+    const gcm12BytePassed = this.testGCMMode();
 
     console.log('\n📊 測試總結:');
     console.log('ECB 模式:', ecbPassed ? '✅' : '❌');
-    console.log('GCM 模式:', gcmPassed ? '✅' : '❌');
-    console.log('整體狀態:', (ecbPassed && gcmPassed) ? '🎉 所有測試通過！' : '⚠️  仍有問題需要調試');
+    console.log('GCM 模式:', gcm12BytePassed ? '✅' : '❌');
+    console.log('整體狀態:', (ecbPassed && gcm12BytePassed) ?
+      '🎉 所有測試通過！' : '⚠️  仍有問題需要調試');
 
-    return ecbPassed && gcmPassed;
+    return ecbPassed && gcm12BytePassed;
   }
 }
 
