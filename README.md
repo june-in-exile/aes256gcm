@@ -1,6 +1,6 @@
 # AES-256-GCM TypeScript Implementation
 
-這是一個用於零知識證明電路驗證的 AES-256-GCM 參考實作，使用 TypeScript 編寫，支援完整的加密和認證功能。
+這是一個用於零知識證明電路驗證的 AES-256-GCM 參考實作，使用 TypeScript 編寫，支援完整的加密和認證功能。相關標準及演算法請參考：[NIST SP 800-38D, Recommendationfor Block Cipher Modes of Operation: Galois/Counter Mode (GCM) and GMAC](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf)
 
 ## 🚀 快速開始
 

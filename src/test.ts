@@ -71,14 +71,14 @@ function basicUsageExample() {
 
   console.log('\n加密結果:');
   console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext));
-  console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.tag));
+  console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.authTag));
 
   return {
     key: AESUtils.bytesToBase64(key),
     iv: AESUtils.bytesToBase64(iv),
     plaintext,
     ciphertext: AESUtils.bytesToBase64(result.ciphertext),
-    tag: AESUtils.bytesToBase64(result.tag)
+    tag: AESUtils.bytesToBase64(result.authTag)
   };
 }
 
@@ -234,7 +234,7 @@ function generateZKPTestVectors() {
     console.log(`  iv: "${testCase.iv}",`);
     console.log(`  plaintext: "${testCase.plaintext}",`);
     console.log(`  expectedCiphertext: "${AESUtils.bytesToBase64(result.ciphertext)}",`);
-    console.log(`  expectedAuthTag: "${AESUtils.bytesToBase64(result.tag)}"`);
+    console.log(`  expectedAuthTag: "${AESUtils.bytesToBase64(result.authTag)}"`);
     console.log('};\n');
   });
 }
@@ -398,11 +398,11 @@ function realWorldExample() {
   console.log('密鑰 (base64):', AESUtils.bytesToBase64(key));
   console.log('IV (base64):', AESUtils.bytesToBase64(iv));
   console.log('密文 (base64):', AESUtils.bytesToBase64(encrypted.ciphertext));
-  console.log('認證標籤 (base64):', AESUtils.bytesToBase64(encrypted.tag));
+  console.log('認證標籤 (base64):', AESUtils.bytesToBase64(encrypted.authTag));
 
   // 顯示大小比較
   const originalSize = plaintextBytes.length;
-  const encryptedSize = encrypted.ciphertext.length + encrypted.tag.length;
+  const encryptedSize = encrypted.ciphertext.length + encrypted.authTag.length;
   console.log(`\n大小比較: 原始 ${originalSize} 字節 -> 加密 ${encryptedSize} 字節 (不含密鑰和IV)`);
 
   // 返回 base64 格式的結果
@@ -411,7 +411,7 @@ function realWorldExample() {
     iv: AESUtils.bytesToBase64(iv),
     plaintext: dataString,
     ciphertext: AESUtils.bytesToBase64(encrypted.ciphertext),
-    authTag: AESUtils.bytesToBase64(encrypted.tag)
+    authTag: AESUtils.bytesToBase64(encrypted.authTag)
   };
 }
 
@@ -477,7 +477,7 @@ function extraVerification() {
   console.log('IV (base64):', testVector.iv);
 
   const ciphertextMatch = AESUtils.bytesToBase64(result.ciphertext) === testVector.expectedCiphertext;
-  const authTagMatch = AESUtils.bytesToBase64(result.tag) === testVector.expectedAuthTag;
+  const authTagMatch = AESUtils.bytesToBase64(result.authTag) === testVector.expectedAuthTag;
 
   console.log('\n預期結果:');
   console.log('密文 (base64):', testVector.expectedCiphertext);
@@ -485,7 +485,7 @@ function extraVerification() {
 
   console.log('\n實際結果:');
   console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext), ciphertextMatch ? '✅' : '❌');
-  console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.tag), authTagMatch ? '✅' : '❌');
+  console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.authTag), authTagMatch ? '✅' : '❌');
 }
 
 // 主測試函數

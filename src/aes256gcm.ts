@@ -296,30 +296,24 @@ export class GF128 {
 }
 
 export class AES256GCM {
-  static ctrEncrypt(plaintext: Buffer, key: Buffer, iv: Buffer): Buffer {
-    if (iv.length !== 12) {
-      throw new Error('IV must be exactly 12 bytes for GCM');
+  static incrementCounter(counter: Buffer): void {
+    let carry = 1;
+    for (let j = 15; j >= 12 && carry; j--) {
+      const sum = counter[j] + carry;
+      counter[j] = sum & 0xff;
+      carry = sum >> 8;
     }
+  }
 
+  static ctrEncrypt(plaintext: Buffer, key: Buffer, j0: Buffer): Buffer {
     const numBlocks = Math.ceil(plaintext.length / 16);
     const ciphertext = Buffer.alloc(plaintext.length);
 
-    // Compute J0
-    const j0 = Buffer.alloc(16);
-    iv.copy(j0, 0, 0, 12);
-    j0.writeUInt32BE(1, 12); // J0 = IV || 0x00000001
-
-    // counter = J0 + 1
     const counter = Buffer.from(j0);
 
     for (let i = 0; i < numBlocks; i++) {
       // 遞增計數器（只遞增最後 4 個字節）
-      let carry = 1;
-      for (let j = 15; j >= 12 && carry; j--) {
-        const sum = counter[j] + carry;
-        counter[j] = sum & 0xff;
-        carry = sum >> 8;
-      }
+      this.incrementCounter(counter);
 
       // 加密當前計數器
       const keystream = AES256.encryptBlock(counter, key);
@@ -362,7 +356,7 @@ export class AES256GCM {
     key: Buffer,
     iv: Buffer,
     additionalData: Buffer = Buffer.alloc(0)
-  ): { ciphertext: Buffer; tag: Buffer } {
+  ): { ciphertext: Buffer; authTag: Buffer } {
     if (key.length !== 32) {
       throw new Error('AES-256-GCM requires a 32-byte key');
     }
@@ -374,14 +368,23 @@ export class AES256GCM {
     const zeroBlock = Buffer.alloc(16);
     const hashKey = AES256.encryptBlock(zeroBlock, key);
 
-    // 2. CTR 模式加密
-    const ciphertext = this.ctrEncrypt(plaintext, key, iv);
+    // 2. 計算 J0
+    const j0 = Buffer.alloc(16);
+    if (iv.length == 12) {
+      iv.copy(j0, 0, 0, 12);
+      j0.writeUInt32BE(1, 12); // J0 = IV || 0x00000001
+    } else {
+      throw new Error('IV must be exactly 12 bytes for GCM');
+    }
 
-    // 3. 構造 GHASH 輸入數據
-    // S = AAD || 0^v || C || 0^u || [len(AAD)]64 || [len(C)]64
+    // 3. CTR 模式加密
+    const ciphertext = this.ctrEncrypt(plaintext, key, j0);
+
+    // 4. 計算 padding v(aadPadding), u(ciphertextPadding)
     const aadPadding = (16 - (additionalData.length % 16)) % 16;
     const ciphertextPadding = (16 - (ciphertext.length % 16)) % 16;
 
+    // 5. S = GHASH_H(AAD || 0^v || C || 0^u || [len(AAD)]64 || [len(C)]64)
     const authDataLength = additionalData.length + aadPadding +
       ciphertext.length + ciphertextPadding + 16;
     const authData = Buffer.alloc(authDataLength);
@@ -405,19 +408,18 @@ export class AES256GCM {
     authData.writeUInt32BE(Math.floor(ciphertextLengthBits / 0x100000000), offset + 8);
     authData.writeUInt32BE(ciphertextLengthBits & 0xffffffff, offset + 12);
 
-    // 4. 計算 GHASH
-    let tag = this.ghash(authData, hashKey);
+    // 計算 GHASH
+    let S = this.ghash(authData, hashKey);
 
-    // 5. 最終標籤計算：T = GCTR_K(J0, GHASH_H(S))
-    const j0 = Buffer.alloc(16);
-    iv.copy(j0, 0, 0, 12);
-    j0.writeUInt32BE(1, 12);
+    // 6. 最終標籤計算：T = GCTR_K(J0, GHASH_H(S))
 
-    // 將 J0 的計數器部分設為 0 來生成認證標籤
+    // S = this.ctrEncrypt(S, key, j0);
+
+
     const tagMask = AES256.encryptBlock(j0, key);
-    tag = AESUtils.xor(tag, tagMask);
+    S = AESUtils.xor(S, tagMask);
 
-    return { ciphertext, tag };
+    return { ciphertext, authTag: S };
   }
 }
 
@@ -437,7 +439,7 @@ export class AES256GCMEasy {
       key: AESUtils.bytesToBase64(keyBytes),
       iv: AESUtils.bytesToBase64(ivBytes),
       ciphertext: AESUtils.bytesToBase64(result.ciphertext),
-      authTag: AESUtils.bytesToBase64(result.tag)
+      authTag: AESUtils.bytesToBase64(result.authTag)
     };
   }
 
@@ -471,12 +473,12 @@ export class AESVerification {
     const cipher = createCipheriv('aes-256-ecb', key, null);
     cipher.setAutoPadding(false);
 
-    let ciphertext = cipher.update(plaintext);
-    ciphertext = Buffer.concat([ciphertext, cipher.final()]);
-    console.log('Node.js crypto:', ciphertext.toString('base64'));
+    let expectedCiphertext = cipher.update(plaintext);
+    expectedCiphertext = Buffer.concat([expectedCiphertext, cipher.final()]);
+    console.log('Node.js crypto:', AESUtils.bytesToBase64(expectedCiphertext));
 
     const ourCiphertext = AES256.encryptBlock(plaintext, key);
-    const isEqual = AESUtils.bytesToHex(ourCiphertext) === ciphertext.toString('hex');
+    const isEqual = ourCiphertext.equals(expectedCiphertext);
 
     console.log('我們的實作:', AESUtils.bytesToBase64(ourCiphertext), isEqual ? '✅' : '❌');
 
@@ -492,21 +494,21 @@ export class AESVerification {
 
     const cipher = createCipheriv('aes-256-gcm', key, iv);
 
-    let ciphertext = cipher.update(plaintext);
-    ciphertext = Buffer.concat([ciphertext, cipher.final()]);
-    const authTag = cipher.getAuthTag();
+    let expectedCiphertext = cipher.update(plaintext);
+    expectedCiphertext = Buffer.concat([expectedCiphertext, cipher.final()]);
+    const expectedAuthTag = cipher.getAuthTag();
 
     console.log('\nNode.js crypto:');
-    console.log('密文 (base64):', ciphertext.toString('base64'));
-    console.log('認證標籤 (base64):', authTag.toString('base64'));
+    console.log('密文 (base64):', AESUtils.bytesToBase64(expectedCiphertext));
+    console.log('認證標籤 (base64):', AESUtils.bytesToBase64(expectedAuthTag));
 
     const result = AES256GCM.encrypt(plaintext, key, iv);
-    const ciphertextMatches = AESUtils.bytesToBase64(result.ciphertext) === ciphertext.toString('base64');
-    const authTagMatches = AESUtils.bytesToBase64(result.tag) === authTag.toString('base64');
+    const ciphertextMatches = result.ciphertext.equals(expectedCiphertext);
+    const authTagMatches = result.authTag.equals(expectedAuthTag);
 
     console.log('\n我們的實作:');
     console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext), ciphertextMatches ? '✅' : '❌');
-    console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.tag), authTagMatches ? '✅' : '❌');
+    console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.authTag), authTagMatches ? '✅' : '❌');
 
     return ciphertextMatches && authTagMatches;
   }
