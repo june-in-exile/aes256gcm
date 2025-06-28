@@ -469,6 +469,7 @@ export class AES256GCM {
     authTag: Buffer,
     additionalData: Buffer = Buffer.alloc(0)
   ): Buffer {
+    // 1. 密鑰與認證標籤必須是指定長度
     if (key.length !== 32) {
       throw new Error('AES-256-GCM requires a 32-byte key');
     }
@@ -476,18 +477,21 @@ export class AES256GCM {
       throw new Error('Authentication tag must be 16 bytes');
     }
 
-    // 1. 生成 hash subkey: H = CIPH_K(0^128)
+    // 2. 生成 hash subkey: H = CIPH_K(0^128)
     const zeroBlock = Buffer.alloc(16);
     const hashKey = AES256.encryptBlock(zeroBlock, key);
 
-    // 2. 計算 J0（支援任意長度 IV）
+    // 3. 計算 J0（支援任意長度 IV）
     const j0 = this.computeJ0(iv, hashKey);
 
-    // 3. 驗證認證標籤
-    // 重新計算 GHASH 以驗證資料完整性
+    // 4. CTR 模式解密（與加密相同，因為 XOR 運算是對稱的）
+    const plaintext = this.ctrEncrypt(ciphertext, key, j0);
+
+    // 5. 計算 padding v(aadPadding), u(ciphertextPadding)
     const aadPadding = (16 - (additionalData.length % 16)) % 16;
     const ciphertextPadding = (16 - (ciphertext.length % 16)) % 16;
 
+    // 6. S = GHASH_H(AAD || 0^v || C || 0^u || [len(AAD)]64 || [len(C)]64)
     const authDataLength = additionalData.length + aadPadding +
       ciphertext.length + ciphertextPadding + 16;
     const authData = Buffer.alloc(authDataLength);
@@ -514,17 +518,14 @@ export class AES256GCM {
     // 計算 GHASH
     let S = this.ghash(authData, hashKey);
 
-    // 計算預期的認證標籤
+    // 7. 最終標籤計算：T = GCTR_K(J0, S) = S xor CIPH_K(J0)
     const tagMask = AES256.encryptBlock(j0, key);
     const expectedAuthTag = AESUtils.xor(S, tagMask);
 
-    // 驗證認證標籤
+    // 8. 驗證認證標籤，返回明文
     if (!expectedAuthTag.equals(authTag)) {
       throw new Error('Authentication failed: Invalid authentication tag');
     }
-
-    // 4. CTR 模式解密（與加密相同，因為 XOR 運算是對稱的）
-    const plaintext = this.ctrEncrypt(ciphertext, key, j0);
 
     return plaintext;
   }
