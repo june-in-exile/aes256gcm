@@ -12,7 +12,7 @@ import {
   GaloisField,
   GF128,
   AESTransforms
-} from './aes256gcm.js';
+} from './main.js';
 import { createCipheriv } from 'crypto';
 
 // 簡化的使用範例

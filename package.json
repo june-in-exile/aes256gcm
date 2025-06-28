@@ -5,12 +5,16 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx src/aes256gcm.ts",
+    "dev": "tsx src/main.ts",
     "test": "tsx src/test.ts",
     "build": "tsc",
     "clean": "rm -rf dist"
   },
-  "keywords": ["aes", "gcm", "crypto"],
+  "keywords": [
+    "aes",
+    "gcm",
+    "crypto"
+  ],
   "author": "",
   "license": "MIT",
   "packageManager": "pnpm@10.11.0",
