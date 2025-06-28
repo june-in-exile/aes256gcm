@@ -2,7 +2,7 @@
  * AES-256-GCM TypeScript 實作 (修正版 - 支援任意長度 IV)
  */
 
-import { createCipheriv } from 'crypto';
+import { createCipheriv, createDecipheriv } from 'crypto';
 
 export class AESUtils {
   static bytesToHex(bytes: Buffer): string {
@@ -676,6 +676,33 @@ export class AESVerification {
     return ciphertextMatches && authTagMatches;
   }
 
+  static testGCMDecrypt(): boolean {
+    console.log('\n=== Node.js crypto 模組驗證 AES-256-GCM 解密 ===');
+
+    const ciphertext = AESUtils.base64ToBytes('PgG52g==');
+    const key = AESUtils.base64ToBytes('qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=');
+    const iv = AESUtils.base64ToBytes('YjgZJzfIXjAYvwt/');
+    const authTag = AESUtils.base64ToBytes('u1NxL5uXKyM/8qbZiBtUvQ==');
+
+    const decipher = createDecipheriv('aes-256-gcm', key, iv);
+
+    decipher.setAuthTag(authTag);
+
+    let expectedPlaintext = decipher.update(ciphertext);
+    expectedPlaintext = Buffer.concat([expectedPlaintext, decipher.final()]);
+
+    console.log('\nNode.js crypto:');
+    console.log('明文 (base64):', AESUtils.bytesToString(expectedPlaintext));
+
+    const plaintext = AES256GCM.decrypt(ciphertext, key, iv, authTag);
+    const plaintextMatches = plaintext.equals(expectedPlaintext);
+
+    console.log('\n我們的實作:');
+    console.log('明文 (base64):', AESUtils.bytesToString(plaintext), plaintextMatches ? '✅' : '❌');
+
+    return plaintextMatches;
+  }
+
   /**
    * 測試 GCM 模式的加密解密循環
    */
@@ -801,17 +828,19 @@ export class AESVerification {
     console.log('🧪 開始 AES-256-GCM 驗證...\n');
 
     const ecbPassed = this.testECBEncrypt();
-    const gcmPassed = this.testGCMEncrypt();
+    const gcmEncryptPassed = this.testGCMEncrypt();
+    const gcmDecryptPassed = this.testGCMDecrypt();
     const roundTripPassed = this.testGCMRoundTrip();
     const authFailPassed = this.testAuthenticationFailure();
 
     console.log('\n📊 測試總結:');
-    console.log('ECB 模式:', ecbPassed ? '✅' : '❌');
-    console.log('GCM 模式:', gcmPassed ? '✅' : '❌');
+    console.log('ECB 模式加密:', ecbPassed ? '✅' : '❌');
+    console.log('GCM 模式加密:', gcmEncryptPassed ? '✅' : '❌');
+    console.log('GCM 模式解密:', gcmDecryptPassed ? '✅' : '❌');
     console.log('加解密循環:', roundTripPassed ? '✅' : '❌');
     console.log('認證驗證:', authFailPassed ? '✅' : '❌');
 
-    const allPassed = ecbPassed && gcmPassed && roundTripPassed && authFailPassed;
+    const allPassed = ecbPassed && gcmEncryptPassed && gcmDecryptPassed && roundTripPassed && authFailPassed;
     console.log('整體狀態:', allPassed ?
       '🎉 所有測試通過！' : '⚠️  仍有問題需要調試');
 
