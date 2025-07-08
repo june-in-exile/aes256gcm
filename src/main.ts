@@ -1,5 +1,5 @@
 /**
- * AES-256-GCM TypeScript 實作 (修正版 - 支援任意長度 IV)
+ * AES-256-GCM TypeScript Implementation (Fixed Version - Supports Arbitrary Length IV)
  */
 
 import { createCipheriv, createDecipheriv } from 'crypto';
@@ -257,26 +257,26 @@ export class AES256 {
   }
 }
 
-// GF(2^128) 運算
+// GF(2^128) operations
 export class GF128 {
-  // GF(2^128) 乘法運算，使用約化多項式 f(x) = x^128 + x^7 + x^2 + x + 1
+  // GF(2^128) multiplication using reduction polynomial f(x) = x^128 + x^7 + x^2 + x + 1
   static multiply(x: Buffer, y: Buffer): Buffer {
     const result = Buffer.alloc(16);
     const v = Buffer.from(y);
 
-    // 對 x 的每一位進行處理
+    // Process each bit of x
     for (let i = 0; i < 128; i++) {
       const byteIndex = Math.floor(i / 8);
       const bitIndex = 7 - (i % 8);
 
-      // 如果 x 的當前位是 1，則將 v 加到結果中
+      // If current bit of x is 1, add v to result
       if ((x[byteIndex] >> bitIndex) & 1) {
         for (let j = 0; j < 16; j++) {
           result[j] ^= v[j];
         }
       }
 
-      // v 右移一位
+      // Right shift v by one bit
       let carry = 0;
       for (let j = 0; j < 16; j++) {
         const newCarry = v[j] & 1;
@@ -284,8 +284,8 @@ export class GF128 {
         carry = newCarry;
       }
 
-      // 如果有進位，需要減去約化多項式
-      // f(x) = x^128 + x^7 + x^2 + x + 1 對應 11100001 00000000 ... 00000000
+      // If there's a carry, subtract the reduction polynomial
+      // f(x) = x^128 + x^7 + x^2 + x + 1 corresponds to 11100001 00000000 ... 00000000
       if (carry) {
         v[0] ^= 0xe1;
       }
@@ -312,13 +312,13 @@ export class AES256GCM {
     const counter = Buffer.from(j0);
 
     for (let i = 0; i < numBlocks; i++) {
-      // 遞增計數器（只遞增最後 4 個字節）
+      // Increment counter (only last 4 bytes)
       this.incrementCounter(counter);
 
-      // 加密當前計數器
+      // Encrypt current counter
       const keystream = AES256.encryptBlock(counter, key);
 
-      // 與明文進行 XOR
+      // XOR with plaintext
       const blockStart = i * 16;
       const blockEnd = Math.min(blockStart + 16, plaintext.length);
       const plaintextBlock = plaintext.subarray(blockStart, blockEnd);
@@ -334,13 +334,13 @@ export class AES256GCM {
   static ghash(data: Buffer, hashKey: Buffer): Buffer {
     let result = Buffer.alloc(16);
 
-    // 處理每 16 字節塊
+    // Process each 16-byte block
     for (let i = 0; i < data.length; i += 16) {
       const block = Buffer.alloc(16);
       const actualLength = Math.min(16, data.length - i);
       data.subarray(i, i + actualLength).copy(block, 0);
 
-      // GHASH 運算：result = (result ⊕ block) × H
+      // GHASH operation: result = (result ⊕ block) × H
       for (let j = 0; j < 16; j++) {
         result[j] ^= block[j];
       }
@@ -352,43 +352,43 @@ export class AES256GCM {
   }
 
   /**
-   * 計算 J0 值，支援任意長度的 IV
-   * 根據 NIST SP 800-38D 標準：
-   * - 如果 IV 長度為 96 位 (12 字節)：J0 = IV || 0x00000001
-   * - 否則：J0 = GHASH_H(IV || 0^(s+64) || [len(IV)]64)
+   * Compute J0 value, supports arbitrary length IV
+   * According to NIST SP 800-38D standard:
+   * - If IV length is 96 bits (12 bytes): J0 = IV || 0x00000001
+   * - Otherwise: J0 = GHASH_H(IV || 0^(s+64) || [len(IV)]64)
    */
   static computeJ0(iv: Buffer, hashKey: Buffer): Buffer {
     if (iv.length === 12) {
-      // 標準情況：IV 為 12 字節
+      // Standard case: IV is 12 bytes
       const j0 = Buffer.alloc(16);
       iv.copy(j0, 0, 0, 12);
       j0.writeUInt32BE(1, 12); // J0 = IV || 0x00000001
       return j0;
     } else {
-      // 非標準情況：使用 GHASH 計算 J0
-      // 計算需要的 padding
-      const s = (128 - (iv.length * 8) % 128) % 128; // padding 到 128 位邊界
+      // Non-standard case: use GHASH to compute J0
+      // Calculate required padding
+      const s = (128 - (iv.length * 8) % 128) % 128; // padding to 128-bit boundary
       const paddingBytes = Math.floor(s / 8);
 
-      // 構建 GHASH 輸入：IV || 0^(s+64) || [len(IV)]64
+      // Build GHASH input: IV || 0^(s+64) || [len(IV)]64
       const ghashInputLength = iv.length + paddingBytes + 8 + 8; // +8 for zero padding, +8 for length
       const ghashInput = Buffer.alloc(ghashInputLength);
 
       let offset = 0;
 
-      // 複製 IV
+      // Copy IV
       iv.copy(ghashInput, offset);
       offset += iv.length;
 
-      // 添加 padding 到 128 位邊界 + 額外 64 位零
-      offset += paddingBytes + 8; // 跳過零填充部分
+      // Add padding to 128-bit boundary + additional 64 zero bits
+      offset += paddingBytes + 8; // Skip zero padding section
 
-      // 添加 IV 長度（以位為單位，64位大端序）
+      // Add IV length (in bits, 64-bit big endian)
       const ivLengthBits = iv.length * 8;
       ghashInput.writeUInt32BE(Math.floor(ivLengthBits / 0x100000000), offset);
       ghashInput.writeUInt32BE(ivLengthBits & 0xffffffff, offset + 4);
 
-      // 使用 GHASH 計算 J0
+      // Use GHASH to compute J0
       return this.ghash(ghashInput, hashKey);
     }
   }
@@ -403,17 +403,17 @@ export class AES256GCM {
       throw new Error('AES-256-GCM requires a 32-byte key');
     }
 
-    // 1. 生成 hash subkey: H = CIPH_K(0^128)
+    // 1. Generate hash subkey: H = CIPH_K(0^128)
     const zeroBlock = Buffer.alloc(16);
     const hashKey = AES256.encryptBlock(zeroBlock, key);
 
-    // 2. 計算 J0（支援任意長度 IV）
+    // 2. Compute J0 (supports arbitrary length IV)
     const j0 = this.computeJ0(iv, hashKey);
 
-    // 3. CTR 模式加密
+    // 3. CTR mode encryption
     const ciphertext = this.ctrEncrypt(plaintext, key, j0);
 
-    // 4. 計算 padding v(aadPadding), u(ciphertextPadding)
+    // 4. Calculate padding v(aadPadding), u(ciphertextPadding)
     const aadPadding = (16 - (additionalData.length % 16)) % 16;
     const ciphertextPadding = (16 - (ciphertext.length % 16)) % 16;
 
@@ -424,15 +424,15 @@ export class AES256GCM {
 
     let offset = 0;
 
-    // 添加 AAD
+    // Add AAD
     additionalData.copy(authData, offset);
     offset += additionalData.length + aadPadding;
 
-    // 添加密文
+    // Add ciphertext
     ciphertext.copy(authData, offset);
     offset += ciphertext.length + ciphertextPadding;
 
-    // 添加長度信息（64位大端序）
+    // Add length information (64-bit big endian)
     const aadLengthBits = additionalData.length * 8;
     const ciphertextLengthBits = ciphertext.length * 8;
 
@@ -441,26 +441,26 @@ export class AES256GCM {
     authData.writeUInt32BE(Math.floor(ciphertextLengthBits / 0x100000000), offset + 8);
     authData.writeUInt32BE(ciphertextLengthBits & 0xffffffff, offset + 12);
 
-    // 計算 GHASH
+    // Calculate GHASH
     let S = this.ghash(authData, hashKey);
 
-    // 6. 最終標籤計算：T = GCTR_K(J0, S) = S xor CIPH_K(J0)
+    // 6. Final tag calculation: T = GCTR_K(J0, S) = S xor CIPH_K(J0)
     const tagMask = AES256.encryptBlock(j0, key);
     S = AESUtils.xor(S, tagMask);
 
-    // 7. 返回密文及標籤
+    // 7. Return ciphertext and tag
     return { ciphertext, authTag: S };
   }
 
   /**
-  * AES-256-GCM 解密函數
-  * @param ciphertext 密文
-  * @param key 32字節密鑰
-  * @param iv 初始向量（任意長度）
-  * @param authTag 認證標籤（16字節）
-  * @param additionalData 額外認證資料（可選）
-  * @returns 解密後的明文
-  * @throws 如果認證失敗會拋出錯誤
+  * AES-256-GCM decryption function
+  * @param ciphertext Ciphertext
+  * @param key 32-byte key
+  * @param iv Initialization vector (arbitrary length)
+  * @param authTag Authentication tag (16 bytes)
+  * @param additionalData Additional authenticated data (optional)
+  * @returns Decrypted plaintext
+  * @throws Error if authentication fails
   */
   static decrypt(
     ciphertext: Buffer,
@@ -469,7 +469,7 @@ export class AES256GCM {
     authTag: Buffer,
     additionalData: Buffer = Buffer.alloc(0)
   ): Buffer {
-    // 1. 密鑰與認證標籤必須是指定長度
+    // 1. Key and authentication tag must be specified lengths
     if (key.length !== 32) {
       throw new Error('AES-256-GCM requires a 32-byte key');
     }
@@ -477,17 +477,17 @@ export class AES256GCM {
       throw new Error('Authentication tag must be 16 bytes');
     }
 
-    // 2. 生成 hash subkey: H = CIPH_K(0^128)
+    // 2. Generate hash subkey: H = CIPH_K(0^128)
     const zeroBlock = Buffer.alloc(16);
     const hashKey = AES256.encryptBlock(zeroBlock, key);
 
-    // 3. 計算 J0（支援任意長度 IV）
+    // 3. Compute J0 (supports arbitrary length IV)
     const j0 = this.computeJ0(iv, hashKey);
 
-    // 4. CTR 模式解密（與加密相同，因為 XOR 運算是對稱的）
+    // 4. CTR mode decryption (same as encryption since XOR is symmetric)
     const plaintext = this.ctrEncrypt(ciphertext, key, j0);
 
-    // 5. 計算 padding v(aadPadding), u(ciphertextPadding)
+    // 5. Calculate padding v(aadPadding), u(ciphertextPadding)
     const aadPadding = (16 - (additionalData.length % 16)) % 16;
     const ciphertextPadding = (16 - (ciphertext.length % 16)) % 16;
 
@@ -498,15 +498,15 @@ export class AES256GCM {
 
     let offset = 0;
 
-    // 添加 AAD
+    // Add AAD
     additionalData.copy(authData, offset);
     offset += additionalData.length + aadPadding;
 
-    // 添加密文
+    // Add ciphertext
     ciphertext.copy(authData, offset);
     offset += ciphertext.length + ciphertextPadding;
 
-    // 添加長度信息（64位大端序）
+    // Add length information (64-bit big endian)
     const aadLengthBits = additionalData.length * 8;
     const ciphertextLengthBits = ciphertext.length * 8;
 
@@ -515,14 +515,14 @@ export class AES256GCM {
     authData.writeUInt32BE(Math.floor(ciphertextLengthBits / 0x100000000), offset + 8);
     authData.writeUInt32BE(ciphertextLengthBits & 0xffffffff, offset + 12);
 
-    // 計算 GHASH
+    // Calculate GHASH
     let S = this.ghash(authData, hashKey);
 
-    // 7. 最終標籤計算：T = GCTR_K(J0, S) = S xor CIPH_K(J0)
+    // 7. Final tag calculation: T = GCTR_K(J0, S) = S xor CIPH_K(J0)
     const tagMask = AES256.encryptBlock(j0, key);
     const expectedAuthTag = AESUtils.xor(S, tagMask);
 
-    // 8. 驗證認證標籤，返回明文
+    // 8. Verify authentication tag and return plaintext
     if (!expectedAuthTag.equals(authTag)) {
       throw new Error('Authentication failed: Invalid authentication tag');
     }
@@ -531,7 +531,7 @@ export class AES256GCM {
   }
 
   /**
-   * 使用給定的認證資料進行解密（包含 AAD）
+   * Decrypt with given additional authenticated data (including AAD)
    */
   static decryptWithAAD(
     ciphertext: Buffer,
@@ -584,12 +584,12 @@ export class AES256GCMEasy {
   }
 
   /**
-   * 簡單的字串解密介面
-   * @param ciphertextBase64 Base64 編碼的密文
-   * @param keyBase64 Base64 編碼的密鑰
-   * @param ivBase64 Base64 編碼的 IV
-   * @param authTagBase64 Base64 編碼的認證標籤
-   * @returns 解密後的字串
+   * Simple string decryption interface
+   * @param ciphertextBase64 Base64 encoded ciphertext
+   * @param keyBase64 Base64 encoded key
+   * @param ivBase64 Base64 encoded IV
+   * @param authTagBase64 Base64 encoded authentication tag
+   * @returns Decrypted string
    */
   static decrypt(
     ciphertextBase64: string,
@@ -607,9 +607,9 @@ export class AES256GCMEasy {
   }
 
   /**
-   * 解密加密結果物件
-   * @param encryptedData 加密方法返回的物件
-   * @returns 原始字串
+   * Decrypt encryption result object
+   * @param encryptedData Object returned by encrypt method
+   * @returns Original string
    */
   static decryptResult(encryptedData: {
     key: string;
@@ -628,7 +628,7 @@ export class AES256GCMEasy {
 
 export class AESVerification {
   static testECBEncrypt(): boolean {
-    console.log('\n=== Node.js crypto 模組驗證 AES-256-ECB 加密 ===');
+    console.log('\n=== Node.js crypto module AES-256-ECB encryption verification ===');
 
     const plaintext = AESUtils.stringToBytes('This is a secret');
     const key = AESUtils.base64ToBytes('qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=');
@@ -643,13 +643,13 @@ export class AESVerification {
     const ourCiphertext = AES256.encryptBlock(plaintext, key);
     const isEqual = ourCiphertext.equals(expectedCiphertext);
 
-    console.log('我們的實作:', AESUtils.bytesToBase64(ourCiphertext), isEqual ? '✅' : '❌');
+    console.log('Our implementation:', AESUtils.bytesToBase64(ourCiphertext), isEqual ? '✅' : '❌');
 
     return isEqual;
   }
 
   static testGCMEncrypt(): boolean {
-    console.log('\n=== Node.js crypto 模組驗證 AES-256-GCM 加密 ===');
+    console.log('\n=== Node.js crypto module AES-256-GCM encryption verification ===');
 
     const plaintext = AESUtils.stringToBytes('Text');
     const key = AESUtils.base64ToBytes('qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=');
@@ -662,32 +662,27 @@ export class AESVerification {
     const expectedAuthTag = cipher.getAuthTag();
 
     console.log('\nNode.js crypto:');
-    console.log('密文 (base64):', AESUtils.bytesToBase64(expectedCiphertext));
-    console.log('認證標籤 (base64):', AESUtils.bytesToBase64(expectedAuthTag));
+    console.log('Ciphertext (base64):', AESUtils.bytesToBase64(expectedCiphertext));
+    console.log('Auth tag (base64):', AESUtils.bytesToBase64(expectedAuthTag));
 
     const result = AES256GCM.encrypt(plaintext, key, iv);
     const ciphertextMatches = result.ciphertext.equals(expectedCiphertext);
     const authTagMatches = result.authTag.equals(expectedAuthTag);
 
-    console.log('\n我們的實作:');
-    console.log('密文 (base64):', AESUtils.bytesToBase64(result.ciphertext), ciphertextMatches ? '✅' : '❌');
-    console.log('認證標籤 (base64):', AESUtils.bytesToBase64(result.authTag), authTagMatches ? '✅' : '❌');
+    console.log('\nOur implementation:');
+    console.log('Ciphertext (base64):', AESUtils.bytesToBase64(result.ciphertext), ciphertextMatches ? '✅' : '❌');
+    console.log('Auth tag (base64):', AESUtils.bytesToBase64(result.authTag), authTagMatches ? '✅' : '❌');
 
     return ciphertextMatches && authTagMatches;
   }
 
   static testGCMDecrypt(): boolean {
-    console.log('\n=== Node.js crypto 模組驗證 AES-256-GCM 解密 ===');
+    console.log('\n=== Node.js crypto module AES-256-GCM decryption verification ===');
 
     const ciphertext = AESUtils.base64ToBytes('PgG52g==');
     const key = AESUtils.base64ToBytes('qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=');
     const iv = AESUtils.base64ToBytes('YjgZJzfIXjAYvwt/');
     const authTag = AESUtils.base64ToBytes('u1NxL5uXKyM/8qbZiBtUvQ==');
-
-    // const ciphertext = AESUtils.base64ToBytes('yEtJMgm3sySkyAaUdJX6mU1XWyYtt6qVj3AQVmp+tiK6/y1kELNk5sYe8+ZaNuvbMe082iU6Wg2wlHgR+BdAJ8C/CK5EKW6mlAVHGPTdEjMgVMYaakF7bVZe6IK1JD5VCcYeff1uprvk7+59Zx4Pv4Q74+TshNsFXOJo34zbbeRKSmCuWa4+zhCL76mWMukq+wnDMRCSKSaelL2DflRLqehKqZ80hFqrtKMjGZa6HLU620iYfemPauDW0Jqxm5WybH7E80FhFcoITBTHTDS5bnzLeUz3Iu8rIFNH4Hsiw2b6YY4f2Uakn1nfquTq84sJsA+/9oiDJ8IIvJXcOgkMKmILmI4fpAnt2Za+zms9TA5YmBetdXQe2UNua72Aj1iVcqAb5Sp4U03dQoSUZJuPFHXnqRV59XerfbBNfgIAu+0HvVidI//1PGTRxDa6yJvfX/tf6Xt405mlHna1XrmLjLCVfwfDRZtS9kW3RUXYKa9NOFXFiK26VxBcQnyMnhsa3J2GbthANuA3U6HT5YOSGUp8FbQM9LOUvGNzW3nKJU+S2gIjfAPW6BmpeqH13wkkBiporF1UatEWdiEczqW4wNacAYxOP1kWLTsBqDz/gRSZ4TcS95z6eKXoUIwxuSYoxx3hJ9qWMqJH+X0O/ghJ0OWg1t3X5YgT/tDD+qNf5oh8vKGT47yPQNq6ySyvHGgJOO/bjzokSAPl4+Fxw99BCaSApD/pFGe8Rt2QYXN8f3vXH6hlkNGFG/cx3U8OOIY/a2QYNpsMfhrcb4jJvgkO8TSi99K0p62ZaLmUZBRjJZ2qC1NP9miRuYa+V6kRvS9K3F4Br1kI6OhqvZoSrtZoi4Av6zwawCb9Bpb/EuGVzMJkxVQeQz7CJacMz/1AFVJyzsWUVdiezPobUnMD1G4PRnEeCisaUOQvZRdUVjKqg823tPhS');
-    // const key = AESUtils.base64ToBytes('z9z+j6Nj6fpRVRvoRE8M+l7/ikUw4AnWVwEtowod6y0=');
-    // const iv = AESUtils.base64ToBytes('ZBNMOrw6/zupIKdM');
-    // const authTag = AESUtils.base64ToBytes('zXDYwr3MNeQu+YzPWN3LvQ==');
 
     const decipher = createDecipheriv('aes-256-gcm', key, iv);
 
@@ -697,34 +692,34 @@ export class AESVerification {
     expectedPlaintext = Buffer.concat([expectedPlaintext, decipher.final()]);
 
     console.log('\nNode.js crypto:');
-    console.log('明文 (base64):', AESUtils.bytesToString(expectedPlaintext));
+    console.log('Plaintext:', AESUtils.bytesToString(expectedPlaintext));
 
     const plaintext = AES256GCM.decrypt(ciphertext, key, iv, authTag);
     const plaintextMatches = plaintext.equals(expectedPlaintext);
 
-    console.log('\n我們的實作:');
-    console.log('明文 (base64):', AESUtils.bytesToString(plaintext), plaintextMatches ? '✅' : '❌');
+    console.log('\nOur implementation:');
+    console.log('Plaintext:', AESUtils.bytesToString(plaintext), plaintextMatches ? '✅' : '❌');
 
     return plaintextMatches;
   }
 
   /**
-   * 測試 GCM 模式的加密解密循環
+   * Test GCM mode encryption-decryption round trip
    */
   static testGCMRoundTrip(): boolean {
-    console.log('\n=== AES-256-GCM 加解密循環測試 ===');
+    console.log('\n=== AES-256-GCM encryption-decryption round trip test ===');
 
     const originalText = 'Hello, AES-256-GCM World! 🔒';
-    console.log('原始文字:', originalText);
+    console.log('Original text:', originalText);
 
-    // 測試 1: 標準 12 字節 IV
-    console.log('\n📋 測試 1: 12 字節 IV');
+    // Test 1: Standard 12-byte IV
+    console.log('\n📋 Test 1: 12-byte IV');
     const key12 = AESUtils.randomBytes(32);
     const iv12 = AESUtils.randomBytes(12);
     const plaintext12 = AESUtils.stringToBytes(originalText);
 
     const encrypted12 = AES256GCM.encrypt(plaintext12, key12, iv12);
-    console.log('加密成功 ✅');
+    console.log('Encryption successful ✅');
 
     try {
       const decrypted12 = AES256GCM.decrypt(
@@ -735,21 +730,21 @@ export class AESVerification {
       );
       const decryptedText12 = AESUtils.bytesToString(decrypted12);
       const success12 = decryptedText12 === originalText;
-      console.log('解密結果:', decryptedText12);
-      console.log('解密成功:', success12 ? '✅' : '❌');
+      console.log('Decryption result:', decryptedText12);
+      console.log('Decryption successful:', success12 ? '✅' : '❌');
     } catch (error) {
-      console.log('解密失敗:', String(error), '❌');
+      console.log('Decryption failed:', String(error), '❌');
       return false;
     }
 
-    // 測試 2: 非標準長度 IV
-    console.log('\n📋 測試 2: 16 字節 IV');
+    // Test 2: Non-standard length IV
+    console.log('\n📋 Test 2: 16-byte IV');
     const key16 = AESUtils.randomBytes(32);
     const iv16 = AESUtils.randomBytes(16);
     const plaintext16 = AESUtils.stringToBytes(originalText);
 
     const encrypted16 = AES256GCM.encrypt(plaintext16, key16, iv16);
-    console.log('加密成功 ✅');
+    console.log('Encryption successful ✅');
 
     try {
       const decrypted16 = AES256GCM.decrypt(
@@ -760,25 +755,25 @@ export class AESVerification {
       );
       const decryptedText16 = AESUtils.bytesToString(decrypted16);
       const success16 = decryptedText16 === originalText;
-      console.log('解密結果:', decryptedText16);
-      console.log('解密成功:', success16 ? '✅' : '❌');
+      console.log('Decryption result:', decryptedText16);
+      console.log('Decryption successful:', success16 ? '✅' : '❌');
     } catch (error) {
-      console.log('解密失敗:', String(error), '❌');
+      console.log('Decryption failed:', String(error), '❌');
       return false;
     }
 
-    // 測試 3: 簡化介面測試
-    console.log('\n📋 測試 3: 簡化介面');
+    // Test 3: Simplified interface test
+    console.log('\n📋 Test 3: Simplified interface');
     const easyEncrypted = AES256GCMEasy.encrypt(originalText);
-    console.log('簡化加密成功 ✅');
+    console.log('Simple encryption successful ✅');
 
     try {
       const easyDecrypted = AES256GCMEasy.decryptResult(easyEncrypted);
       const success3 = easyDecrypted === originalText;
-      console.log('解密結果:', easyDecrypted);
-      console.log('簡化解密成功:', success3 ? '✅' : '❌');
+      console.log('Decryption result:', easyDecrypted);
+      console.log('Simple decryption successful:', success3 ? '✅' : '❌');
     } catch (error) {
-      console.log('簡化解密失敗:', String(error), '❌');
+      console.log('Simple decryption failed:', String(error), '❌');
       return false;
     }
 
@@ -786,10 +781,10 @@ export class AESVerification {
   }
 
   /**
-   * 測試認證標籤驗證
+   * Test authentication tag verification
    */
   static testAuthenticationFailure(): boolean {
-    console.log('\n=== 認證失敗測試 ===');
+    console.log('\n=== Authentication failure test ===');
 
     const originalText = 'Secret message';
     const key = AESUtils.randomBytes(32);
@@ -798,39 +793,39 @@ export class AESVerification {
 
     const encrypted = AES256GCM.encrypt(plaintext, key, iv);
 
-    // 測試 1: 錯誤的認證標籤
-    console.log('\n📋 測試 1: 修改認證標籤');
+    // Test 1: Wrong authentication tag
+    console.log('\n📋 Test 1: Modified authentication tag');
     const wrongAuthTag = Buffer.from(encrypted.authTag);
-    wrongAuthTag[0] ^= 0x01; // 修改一個位元
+    wrongAuthTag[0] ^= 0x01; // Modify one bit
 
     try {
       AES256GCM.decrypt(encrypted.ciphertext, key, iv, wrongAuthTag);
-      console.log('應該失敗但沒有失敗 ❌');
+      console.log('Should have failed but didn\'t ❌');
       return false;
     } catch (error) {
-      console.log('正確檢測到認證失敗 ✅');
+      console.log('Correctly detected authentication failure ✅');
     }
 
-    // 測試 2: 修改密文
-    console.log('\n📋 測試 2: 修改密文');
+    // Test 2: Modified ciphertext
+    console.log('\n📋 Test 2: Modified ciphertext');
     const wrongCiphertext = Buffer.from(encrypted.ciphertext);
     if (wrongCiphertext.length > 0) {
-      wrongCiphertext[0] ^= 0x01; // 修改一個位元
+      wrongCiphertext[0] ^= 0x01; // Modify one bit
     }
 
     try {
       AES256GCM.decrypt(wrongCiphertext, key, iv, encrypted.authTag);
-      console.log('應該失敗但沒有失敗 ❌');
+      console.log('Should have failed but didn\'t ❌');
       return false;
     } catch (error) {
-      console.log('正確檢測到認證失敗 ✅');
+      console.log('Correctly detected authentication failure ✅');
     }
 
     return true;
   }
 
   static runAllTests(): boolean {
-    console.log('🧪 開始 AES-256-GCM 驗證...\n');
+    console.log('🧪 Starting AES-256-GCM verification...\n');
 
     const ecbPassed = this.testECBEncrypt();
     const gcmEncryptPassed = this.testGCMEncrypt();
@@ -838,44 +833,44 @@ export class AESVerification {
     const roundTripPassed = this.testGCMRoundTrip();
     const authFailPassed = this.testAuthenticationFailure();
 
-    console.log('\n📊 測試總結:');
-    console.log('ECB 模式加密:', ecbPassed ? '✅' : '❌');
-    console.log('GCM 模式加密:', gcmEncryptPassed ? '✅' : '❌');
-    console.log('GCM 模式解密:', gcmDecryptPassed ? '✅' : '❌');
-    console.log('加解密循環:', roundTripPassed ? '✅' : '❌');
-    console.log('認證驗證:', authFailPassed ? '✅' : '❌');
+    console.log('\n📊 Test summary:');
+    console.log('ECB mode encryption:', ecbPassed ? '✅' : '❌');
+    console.log('GCM mode encryption:', gcmEncryptPassed ? '✅' : '❌');
+    console.log('GCM mode decryption:', gcmDecryptPassed ? '✅' : '❌');
+    console.log('Encryption-decryption round trip:', roundTripPassed ? '✅' : '❌');
+    console.log('Authentication verification:', authFailPassed ? '✅' : '❌');
 
     const allPassed = ecbPassed && gcmEncryptPassed && gcmDecryptPassed && roundTripPassed && authFailPassed;
-    console.log('整體狀態:', allPassed ?
-      '🎉 所有測試通過！' : '⚠️  仍有問題需要調試');
+    console.log('Overall status:', allPassed ?
+      '🎉 All tests passed!' : '⚠️  Issues still need debugging');
 
     return allPassed;
   }
 }
 
-// 使用範例
+// Usage examples
 export class AESGCMExample {
   static demonstrateUsage(): void {
-    console.log('🔒 AES-256-GCM 使用範例\n');
+    console.log('🔒 AES-256-GCM Usage Examples\n');
 
-    // 範例 1: 基本加解密
-    console.log('=== 基本使用 ===');
+    // Example 1: Basic encryption and decryption
+    console.log('=== Basic Usage ===');
     const message = 'This is a confidential message! 🔐';
     const encrypted = AES256GCMEasy.encrypt(message);
 
-    console.log('原始訊息:', message);
-    console.log('加密結果:');
-    console.log('  密鑰:', encrypted.key);
+    console.log('Original message:', message);
+    console.log('Encryption result:');
+    console.log('  Key:', encrypted.key);
     console.log('  IV:', encrypted.iv);
-    console.log('  密文:', encrypted.ciphertext);
-    console.log('  認證標籤:', encrypted.authTag);
+    console.log('  Ciphertext:', encrypted.ciphertext);
+    console.log('  Auth tag:', encrypted.authTag);
 
     const decrypted = AES256GCMEasy.decryptResult(encrypted);
-    console.log('解密結果:', decrypted);
-    console.log('驗證:', message === decrypted ? '✅ 成功' : '❌ 失敗');
+    console.log('Decryption result:', decrypted);
+    console.log('Verification:', message === decrypted ? '✅ Success' : '❌ Failed');
 
-    // 範例 2: 使用固定密鑰和 IV
-    console.log('\n=== 使用固定參數 ===');
+    // Example 2: Using fixed key and IV
+    console.log('\n=== Using Fixed Parameters ===');
     const fixedKey = 'qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=';
     const fixedIV = 'YjgZJzfIXjAYvwt/';
 
@@ -887,12 +882,12 @@ export class AESGCMExample {
       encrypted2.authTag
     );
 
-    console.log('使用固定參數加解密:', message === decrypted2 ? '✅ 成功' : '❌ 失敗');
+    console.log('Fixed parameter encryption-decryption:', message === decrypted2 ? '✅ Success' : '❌ Failed');
   }
 }
 
-// 如果直接執行此檔案，運行範例
-if (import.meta.url === `file://${process.argv[1]}`) {
+// If this file is executed directly, run examples
+if (import.meta.url === new URL(process.argv[1], "file:").href) {
   AESVerification.runAllTests();
   console.log('\n' + '='.repeat(50) + '\n');
   AESGCMExample.demonstrateUsage();
