@@ -519,8 +519,6 @@ class AESGCM {
     iv: Buffer,
     additionalData: Buffer = Buffer.alloc(0),
   ): { ciphertext: Buffer; authTag: Buffer } {
-    const config = AESUtils.validateKeySize(key);
-
     // 1. Generate hash subkey: H = CIPH_K(0^128)
     const zeroBlock = Buffer.alloc(16);
     const hashKey = AES.encryptBlock(zeroBlock, key);
@@ -588,7 +586,6 @@ class AESGCM {
     additionalData: Buffer = Buffer.alloc(0),
   ): Buffer {
     // 1. Validate inputs
-    const config = AESUtils.validateKeySize(key);
     if (authTag.length !== 16) {
       throw new Error("Authentication tag must be 16 bytes");
     }
@@ -639,7 +636,7 @@ class AESGCM {
     authData.writeUInt32BE(ciphertextLengthBits & 0xffffffff, offset + 12);
 
     // Calculate GHASH
-    let S = this.ghash(authData, hashKey);
+    const S = this.ghash(authData, hashKey);
 
     // 7. Final tag calculation: T = GCTR_K(J0, S) = S xor CIPH_K(J0)
     const tagMask = AES.encryptBlock(j0, key);
@@ -651,146 +648,6 @@ class AESGCM {
     }
 
     return plaintext;
-  }
-}
-
-// Legacy aliases for backwards compatibility
-class AES256 {
-  static encryptBlock(plaintext: Buffer, key: Buffer): Buffer {
-    if (key.length !== 32) {
-      throw new Error("AES256.encryptBlock requires a 32-byte key");
-    }
-    return AES.encryptBlock(plaintext, key);
-  }
-}
-
-class AES256GCM {
-  static encrypt(
-    plaintext: Buffer,
-    key: Buffer,
-    iv: Buffer,
-    additionalData: Buffer = Buffer.alloc(0),
-  ): { ciphertext: Buffer; authTag: Buffer } {
-    if (key.length !== 32) {
-      throw new Error("AES256GCM requires a 32-byte key");
-    }
-    return AESGCM.encrypt(plaintext, key, iv, additionalData);
-  }
-
-  static decrypt(
-    ciphertext: Buffer,
-    key: Buffer,
-    iv: Buffer,
-    authTag: Buffer,
-    additionalData: Buffer = Buffer.alloc(0),
-  ): Buffer {
-    if (key.length !== 32) {
-      throw new Error("AES256GCM requires a 32-byte key");
-    }
-    return AESGCM.decrypt(ciphertext, key, iv, authTag, additionalData);
-  }
-
-  static decryptWithAAD(
-    ciphertext: Buffer,
-    key: Buffer,
-    iv: Buffer,
-    authTag: Buffer,
-    additionalData: Buffer,
-  ): Buffer {
-    return this.decrypt(ciphertext, key, iv, authTag, additionalData);
-  }
-}
-
-// New classes for AES-128 and AES-192
-class AES128 {
-  static encryptBlock(plaintext: Buffer, key: Buffer): Buffer {
-    if (key.length !== 16) {
-      throw new Error("AES128.encryptBlock requires a 16-byte key");
-    }
-    return AES.encryptBlock(plaintext, key);
-  }
-}
-
-class AES128GCM {
-  static encrypt(
-    plaintext: Buffer,
-    key: Buffer,
-    iv: Buffer,
-    additionalData: Buffer = Buffer.alloc(0),
-  ): { ciphertext: Buffer; authTag: Buffer } {
-    if (key.length !== 16) {
-      throw new Error("AES128GCM requires a 16-byte key");
-    }
-    return AESGCM.encrypt(plaintext, key, iv, additionalData);
-  }
-
-  static decrypt(
-    ciphertext: Buffer,
-    key: Buffer,
-    iv: Buffer,
-    authTag: Buffer,
-    additionalData: Buffer = Buffer.alloc(0),
-  ): Buffer {
-    if (key.length !== 16) {
-      throw new Error("AES128GCM requires a 16-byte key");
-    }
-    return AESGCM.decrypt(ciphertext, key, iv, authTag, additionalData);
-  }
-
-  static decryptWithAAD(
-    ciphertext: Buffer,
-    key: Buffer,
-    iv: Buffer,
-    authTag: Buffer,
-    additionalData: Buffer,
-  ): Buffer {
-    return this.decrypt(ciphertext, key, iv, authTag, additionalData);
-  }
-}
-
-class AES192 {
-  static encryptBlock(plaintext: Buffer, key: Buffer): Buffer {
-    if (key.length !== 24) {
-      throw new Error("AES192.encryptBlock requires a 24-byte key");
-    }
-    return AES.encryptBlock(plaintext, key);
-  }
-}
-
-class AES192GCM {
-  static encrypt(
-    plaintext: Buffer,
-    key: Buffer,
-    iv: Buffer,
-    additionalData: Buffer = Buffer.alloc(0),
-  ): { ciphertext: Buffer; authTag: Buffer } {
-    if (key.length !== 24) {
-      throw new Error("AES192GCM requires a 24-byte key");
-    }
-    return AESGCM.encrypt(plaintext, key, iv, additionalData);
-  }
-
-  static decrypt(
-    ciphertext: Buffer,
-    key: Buffer,
-    iv: Buffer,
-    authTag: Buffer,
-    additionalData: Buffer = Buffer.alloc(0),
-  ): Buffer {
-    if (key.length !== 24) {
-      throw new Error("AES192GCM requires a 24-byte key");
-    }
-    return AESGCM.decrypt(ciphertext, key, iv, authTag, additionalData);
-  }
-
-  static decryptWithAAD(
-    ciphertext: Buffer,
-    key: Buffer,
-    iv: Buffer,
-    authTag: Buffer,
-    additionalData: Buffer,
-  ): Buffer {
-    return this.decrypt(ciphertext, key, iv, authTag, additionalData);
   }
 }
 
@@ -893,52 +750,6 @@ class AESGCMEasy {
       encryptedData.iv,
       encryptedData.authTag,
     );
-  }
-}
-
-// Legacy alias for backwards compatibility
-class AES256GCMEasy {
-  static encrypt(
-    plaintext: string,
-    keyBase64?: string,
-    ivBase64?: string,
-  ): { key: string; iv: string; ciphertext: string; authTag: string } {
-    const result = AESGCMEasy.encrypt(plaintext, keyBase64, ivBase64, 256);
-    // Remove variant field for backwards compatibility
-    const { variant, ...legacyResult } = result;
-    return legacyResult;
-  }
-
-  static encryptBlock(
-    plaintext: string,
-    keyBase64: string,
-  ): { key: string; plaintext: string; ciphertext: string } {
-    const keyBytes = AESUtils.base64ToBytes(keyBase64);
-    if (keyBytes.length !== 32) {
-      throw new Error("AES256GCMEasy.encryptBlock requires a 32-byte key");
-    }
-    const result = AESGCMEasy.encryptBlock(plaintext, keyBase64);
-    // Remove variant field for backwards compatibility
-    const { variant, ...legacyResult } = result;
-    return legacyResult;
-  }
-
-  static decrypt(
-    ciphertextBase64: string,
-    keyBase64: string,
-    ivBase64: string,
-    authTagBase64: string,
-  ): string {
-    return AESGCMEasy.decrypt(ciphertextBase64, keyBase64, ivBase64, authTagBase64);
-  }
-
-  static decryptResult(encryptedData: {
-    key: string;
-    iv: string;
-    ciphertext: string;
-    authTag: string;
-  }): string {
-    return AESGCMEasy.decryptResult(encryptedData);
   }
 }
 
@@ -1047,50 +858,44 @@ class AESVerification {
 
     let allPassed = true;
 
-    // Pre-computed test vectors
-    const testVectors = [
-      {
-        keySize: 128,
-        ciphertext: "8ZFLJw==", // Base64
-        key: "qmpEWRQQ+w1hp6xFYkoXFQ==",
-        iv: "YjgZJzfIXjAYvwt/",
-        authTag: "M8iZqA4MhQKhJIhBfLkRcw==",
-      },
-      {
-        keySize: 192,
-        ciphertext: "8ZFLJw==", // Base64
-        key: "qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XT",
-        iv: "YjgZJzfIXjAYvwt/",
-        authTag: "FdjCUe/7FZLrGFJT6/6hFw==",
-      },
-      {
-        keySize: 256,
-        ciphertext: "PgG52g==", // Base64
-        key: "qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=",
-        iv: "YjgZJzfIXjAYvwt/",
-        authTag: "u1NxL5uXKyM/8qbZiBtUvQ==",
-      },
+    // Generate valid test vectors by first encrypting with Node.js crypto
+    const testPlaintext = "Test message";
+    const plaintextBytes = AESUtils.stringToBytes(testPlaintext);
+    const iv = AESUtils.base64ToBytes("YjgZJzfIXjAYvwt/");
+
+    const keys = [
+      { size: 128, key: AESUtils.base64ToBytes("qmpEWRQQ+w1hp6xFYkoXFQ==") },
+      { size: 192, key: AESUtils.base64ToBytes("qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XT") },
+      { size: 256, key: AESUtils.base64ToBytes("qmpEWRQQ+w1hp6xFYkoXFUHZA8Os71XTWxDZIdNAS7o=") },
     ];
 
-    for (const vector of testVectors) {
-      console.log(`\n--- AES-${vector.keySize}-GCM ---`);
+    for (const { size, key } of keys) {
+      console.log(`\n--- AES-${size}-GCM ---`);
 
-      const ciphertext = AESUtils.base64ToBytes(vector.ciphertext);
-      const key = AESUtils.base64ToBytes(vector.key);
-      const iv = AESUtils.base64ToBytes(vector.iv);
-      const authTag = AESUtils.base64ToBytes(vector.authTag);
+      // First encrypt with Node.js crypto to get valid test vector
+      const cipherName = `aes-${size}-gcm`;
+      const cipher = createCipheriv(cipherName, key, iv) as CipherGCM;
 
-      const cipherName = `aes-${vector.keySize}-gcm`;
+      let nodeCiphertext = cipher.update(plaintextBytes);
+      nodeCiphertext = Buffer.concat([nodeCiphertext, cipher.final()]);
+      const nodeAuthTag = cipher.getAuthTag();
+
+      console.log("Node.js crypto created:");
+      console.log("  Ciphertext:", AESUtils.bytesToBase64(nodeCiphertext));
+      console.log("  Auth tag:", AESUtils.bytesToBase64(nodeAuthTag));
+
+      // Now verify decryption with Node.js crypto
       const decipher = createDecipheriv(cipherName, key, iv) as DecipherGCM;
-      decipher.setAuthTag(authTag);
+      decipher.setAuthTag(nodeAuthTag);
 
-      let expectedPlaintext = decipher.update(ciphertext);
+      let expectedPlaintext = decipher.update(nodeCiphertext);
       expectedPlaintext = Buffer.concat([expectedPlaintext, decipher.final()]);
 
-      console.log("Node.js crypto:");
+      console.log("Node.js crypto decrypted:");
       console.log("  Plaintext:", AESUtils.bytesToString(expectedPlaintext));
 
-      const plaintext = AESGCM.decrypt(ciphertext, key, iv, authTag);
+      // Test our implementation
+      const plaintext = AESGCM.decrypt(nodeCiphertext, key, iv, nodeAuthTag);
       const plaintextMatches = plaintext.equals(expectedPlaintext);
 
       console.log("Our implementation:");
@@ -1193,7 +998,7 @@ class AESVerification {
         AESGCM.decrypt(encrypted.ciphertext, key, iv, wrongAuthTag);
         console.log("  Should have failed but didn't ❌");
         allPassed = false;
-      } catch (error) {
+      } catch {
         console.log("  Correctly detected auth failure ✅");
       }
 
@@ -1207,7 +1012,7 @@ class AESVerification {
         AESGCM.decrypt(wrongCiphertext, key, iv, encrypted.authTag);
         console.log("  Should have failed but didn't ❌");
         allPassed = false;
-      } catch (error) {
+      } catch {
         console.log("  Correctly detected modification ✅");
       }
     }
@@ -1249,71 +1054,9 @@ class AESVerification {
   }
 }
 
-// Usage examples
-class AESGCMExample {
-  static demonstrateUsage(): void {
-    console.log("🔒 AES Multi-Variant GCM Usage Examples\n");
-
-    // Example 1: Auto-detect usage with different key sizes
-    console.log("=== Auto-detect AES Variant ===");
-    const message = "This is a confidential message! 🔐";
-
-    for (const keySize of [128, 192, 256] as AESKeySize[]) {
-      console.log(`\n--- AES-${keySize} ---`);
-      const encrypted = AESGCMEasy.encrypt(message, undefined, undefined, keySize);
-
-      console.log("Variant:", encrypted.variant);
-      console.log("Key length:", AESUtils.base64ToBytes(encrypted.key).length, "bytes");
-      console.log("Ciphertext:", encrypted.ciphertext);
-
-      const decrypted = AESGCMEasy.decryptResult(encrypted);
-      console.log("Verification:", message === decrypted ? "✅" : "❌");
-    }
-
-    // Example 2: Using specific AES classes
-    console.log("\n=== Using Specific AES Classes ===");
-
-    const key128 = AESUtils.randomBytes(16);
-    const key192 = AESUtils.randomBytes(24);
-    const key256 = AESUtils.randomBytes(32);
-    const iv = AESUtils.randomBytes(12);
-    const plaintext = AESUtils.stringToBytes(message);
-
-    // AES-128-GCM
-    const result128 = AES128GCM.encrypt(plaintext, key128, iv);
-    const decrypted128 = AES128GCM.decrypt(result128.ciphertext, key128, iv, result128.authTag);
-    console.log("AES-128-GCM:", AESUtils.bytesToString(decrypted128) === message ? "✅" : "❌");
-
-    // AES-192-GCM
-    const result192 = AES192GCM.encrypt(plaintext, key192, iv);
-    const decrypted192 = AES192GCM.decrypt(result192.ciphertext, key192, iv, result192.authTag);
-    console.log("AES-192-GCM:", AESUtils.bytesToString(decrypted192) === message ? "✅" : "❌");
-
-    // AES-256-GCM  
-    const result256 = AES256GCM.encrypt(plaintext, key256, iv);
-    const decrypted256 = AES256GCM.decrypt(result256.ciphertext, key256, iv, result256.authTag);
-    console.log("AES-256-GCM:", AESUtils.bytesToString(decrypted256) === message ? "✅" : "❌");
-
-    // Example 3: Block encryption
-    console.log("\n=== Block Encryption Examples ===");
-    const blockMessage = "Block test msg!!"; // Exactly 16 characters
-
-    const blockResult128 = AESGCMEasy.encryptBlock(blockMessage, AESUtils.bytesToBase64(key128));
-    console.log("AES-128 block:", blockResult128.variant, blockResult128.ciphertext);
-
-    const blockResult192 = AESGCMEasy.encryptBlock(blockMessage, AESUtils.bytesToBase64(key192));
-    console.log("AES-192 block:", blockResult192.variant, blockResult192.ciphertext);
-
-    const blockResult256 = AESGCMEasy.encryptBlock(blockMessage, AESUtils.bytesToBase64(key256));
-    console.log("AES-256 block:", blockResult256.variant, blockResult256.ciphertext);
-  }
-}
-
 // If this file is executed directly, run examples
-if (require.main === module) {
+if (typeof process !== 'undefined' && process.argv?.[1] && (process.argv[1].endsWith('main.ts'))) {
   AESVerification.runAllTests();
-  console.log("\n" + "=".repeat(50) + "\n");
-  AESGCMExample.demonstrateUsage();
 }
 
 export {
@@ -1323,16 +1066,8 @@ export {
   AESTransforms,
   AESKeyExpansion,
   AES,
-  AES128,
-  AES192,
-  AES256,
   GF128,
   AESGCM,
-  AES128GCM,
-  AES192GCM,
-  AES256GCM,
   AESGCMEasy,
-  AES256GCMEasy,
   AESVerification,
-  AESGCMExample,
 };
