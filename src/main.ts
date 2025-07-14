@@ -392,7 +392,7 @@ class GF128 {
         carry = newCarry;
       }
 
-      // If there's a carry, subtract the reduction polynomial
+      // If there's a carry, xor the reduction polynomial
       // f(x) = x^128 + x^7 + x^2 + x + 1 corresponds to 11100001 00000000 ... 00000000
       if (carry) {
         v[0] ^= 0xe1;
